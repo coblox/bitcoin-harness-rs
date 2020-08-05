@@ -46,7 +46,12 @@ jobs:
   build_test:
     strategy:
       matrix:
-        rust_toolchain: [stable, beta, nightly]
+        rust_toolchain: [stable, beta]
+        continue_on_error: [false]
+        include:
+          - rust_toolchain: nightly
+            continue_on_error: true
+    continue-on-error: ${{ matrix.continue_on_error }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
