@@ -1,3 +1,18 @@
+#![warn(
+    unused_extern_crates,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    rust_2018_idioms,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::fallible_impl_from,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::dbg_macro
+)]
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+#![forbid(unsafe_code)]
+
 //! # bitcoin-harness
 //! A simple lib to start a bitcoind container, generate blocks and funds addresses.
 //! Note: It uses tokio.
@@ -26,6 +41,8 @@ use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+const BITCOIND_RPC_PORT: u16 = 18443;
+
 #[derive(Debug)]
 pub struct Bitcoind<'c> {
     pub container: Container<'c, clients::Cli, BitcoinCore>,
@@ -37,14 +54,14 @@ impl<'c> Bitcoind<'c> {
     /// Starts a new regtest bitcoind container
     pub fn new(client: &'c clients::Cli, tag: &str) -> Result<Self> {
         let container = client.run(BitcoinCore::default().with_tag(tag));
-        let port = container.get_host_port(18443);
+        let port = container
+            .get_host_port(BITCOIND_RPC_PORT)
+            .ok_or(Error::PortNotExposed(BITCOIND_RPC_PORT))?;
 
         let auth = container.image().auth();
         let url = format!(
             "http://{}:{}@localhost:{}",
-            &auth.username,
-            &auth.password,
-            port.unwrap()
+            &auth.username, &auth.password, port
         );
         let url = Url::parse(&url)?;
 
@@ -110,4 +127,6 @@ pub enum Error {
     BitcoindRpc(#[from] bitcoind_rpc::Error),
     #[error("Url Parsing: ")]
     UrlParseError(#[from] url::ParseError),
+    #[error("Docker port not exposed: ")]
+    PortNotExposed(u16),
 }
