@@ -1,13 +1,49 @@
+#![warn(
+    unused_extern_crates,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    rust_2018_idioms,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::fallible_impl_from,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::dbg_macro
+)]
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+#![forbid(unsafe_code)]
+
+//! # bitcoin-harness
+//! A simple lib to start a bitcoind container, generate blocks and funds addresses.
+//! Note: It uses tokio.
+//!
+//! # Examples
+//! ```rust
+//! #[tokio::main]
+//! async fn main() {
+//!     let tc_client = testcontainers::clients::Cli::default();
+//!     let bitcoind = bitcoin_harness::Bitcoind::new(&tc_client, "0.20.0").unwrap();
+//!     let client = bitcoin_harness::bitcoind_rpc::Client::new(bitcoind.node_url);
+//!     let network = client.network().await.unwrap();
+//!
+//!     assert_eq!(network, bitcoin::Network::Regtest)
+//! }
+//! ```
+//!
+
+pub mod bitcoind_rpc;
+pub mod json_rpc;
+
+use crate::bitcoind_rpc::Client;
+use reqwest::Url;
 use std::time::Duration;
 use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container, Docker};
-use bitcoincore_rpc::{Client, Auth, RpcApi};
-use url::Url;
-
-pub use bitcoincore_rpc::bitcoin;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Clone)]
+const BITCOIND_RPC_PORT: u16 = 18443;
+
+#[derive(Debug)]
 pub struct Bitcoind<'c> {
     pub container: Container<'c, clients::Cli, BitcoinCore>,
     pub node_url: Url,
@@ -18,14 +54,14 @@ impl<'c> Bitcoind<'c> {
     /// Starts a new regtest bitcoind container
     pub fn new(client: &'c clients::Cli, tag: &str) -> Result<Self> {
         let container = client.run(BitcoinCore::default().with_tag(tag));
-        let port = container.get_host_port(18443);
+        let port = container
+            .get_host_port(BITCOIND_RPC_PORT)
+            .ok_or(Error::PortNotExposed(BITCOIND_RPC_PORT))?;
 
         let auth = container.image().auth();
         let url = format!(
             "http://{}:{}@localhost:{}",
-            &auth.username,
-            &auth.password,
-            port.unwrap()
+            &auth.username, &auth.password, port
         );
         let url = Url::parse(&url)?;
 
@@ -41,8 +77,8 @@ impl<'c> Bitcoind<'c> {
     /// Create a test wallet, generate enough block to fund it and activate segwit.
     /// Generate enough blocks to make the passed `spendable_quantity` spendable.
     /// Spawn a tokio thread to mine a new block every second.
-    pub async fn init(&self, spendable_quantity: u64) -> Result<()> {
-        let bitcoind_client = Client::new(self.node_url.clone(), Auth::None)?;
+    pub async fn init(&self, spendable_quantity: u32) -> Result<()> {
+        let bitcoind_client = Client::new(self.node_url.clone());
 
         bitcoind_client
             .create_wallet(&self.wallet_name, None, None, None, None)
@@ -61,12 +97,8 @@ impl<'c> Bitcoind<'c> {
     }
 
     /// Send Bitcoin to the specified address, limited to the spendable bitcoin quantity.
-    pub async fn mint(
-        &self,
-        address: bitcoin::Address,
-        amount: bitcoin::Amount,
-    ) -> anyhow::Result<()> {
-        let bitcoind_client = bitcoin::Client::new(self.node_url.clone());
+    pub async fn mint(&self, address: bitcoin::Address, amount: bitcoin::Amount) -> Result<()> {
+        let bitcoind_client = Client::new(self.node_url.clone());
 
         bitcoind_client
             .send_to_address(&self.wallet_name, address.clone(), amount)
@@ -76,14 +108,11 @@ impl<'c> Bitcoind<'c> {
     }
 
     pub fn container_id(&self) -> &str {
-        self._container.id()
+        self.container.id()
     }
 }
 
-async fn mine(
-    bitcoind_client: bitcoin::Client,
-    reward_address: bitcoin::Address,
-) -> anyhow::Result<()> {
+async fn mine(bitcoind_client: Client, reward_address: bitcoin::Address) -> Result<()> {
     loop {
         tokio::time::delay_for(Duration::from_secs(1)).await;
         bitcoind_client
@@ -92,4 +121,12 @@ async fn mine(
     }
 }
 
-pub struct Error;
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Bitcoin Rpc: ")]
+    BitcoindRpc(#[from] bitcoind_rpc::Error),
+    #[error("Url Parsing: ")]
+    UrlParseError(#[from] url::ParseError),
+    #[error("Docker port not exposed: ")]
+    PortNotExposed(u16),
+}
