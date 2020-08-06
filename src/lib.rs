@@ -19,15 +19,15 @@
 //!
 //! # Examples
 //! ```rust
-//! #[tokio::main]
-//! async fn main() {
-//!     let tc_client = testcontainers::clients::Cli::default();
-//!     let bitcoind = bitcoin_harness::Bitcoind::new(&tc_client, "0.20.0").unwrap();
-//!     let client = bitcoin_harness::bitcoind_rpc::Client::new(bitcoind.node_url);
-//!     let network = client.network().await.unwrap();
+//! # #[tokio::main]
+//! # async fn main() {
+//! let tc_client = testcontainers::clients::Cli::default();
+//! let bitcoind = bitcoin_harness::Bitcoind::new(&tc_client, "0.20.0").unwrap();
+//! let client = bitcoin_harness::bitcoind_rpc::Client::new(bitcoind.node_url);
+//! let network = client.network().await.unwrap();
 //!
-//!     assert_eq!(network, bitcoin::Network::Regtest)
-//! }
+//! assert_eq!(network, bitcoin::Network::Regtest)
+//! # }
 //! ```
 //!
 
