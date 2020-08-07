@@ -35,7 +35,7 @@
 //! # }
 //! ```
 //!
-//! ## Create a wallet and fund it
+//! ## Create a wallet, fund it and get a UTXO
 //!
 //! ```rust
 //! use bitcoin_harness::{Bitcoind, bitcoind_rpc, Client, Wallet};
@@ -56,8 +56,11 @@
 //!
 //! let balance = wallet.balance().await.unwrap();
 //!
-//! assert_eq!(balance, amount)
+//! assert_eq!(balance, amount);
 //!
+//! let utxos = wallet.list_unspent().await.unwrap();
+//!
+//! assert_eq!(utxos.get(0).unwrap().amount, 3.0);
 //! # }
 //! ```
 
