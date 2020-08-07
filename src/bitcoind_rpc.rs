@@ -234,7 +234,6 @@ impl Client {
         Ok(wallets)
     }
 
-    #[allow(dead_code)]
     pub async fn derive_addresses(
         &self,
         descriptor: &str,
@@ -284,6 +283,33 @@ impl Client {
             ))
             .await?;
         Ok(response)
+    }
+
+    pub async fn list_unspent(
+        &self,
+        wallet_name: &str,
+        min_conf: Option<u32>,
+        max_conf: Option<u32>,
+        addresses: Option<Vec<Address>>,
+        include_unsafe: Option<bool>,
+    ) -> Result<Vec<Unspent>> {
+        let unspents = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "listunspent",
+                    vec![
+                        json_rpc::serialize(min_conf)?,
+                        json_rpc::serialize(max_conf)?,
+                        json_rpc::serialize(addresses)?,
+                        json_rpc::serialize(include_unsafe)?,
+                    ],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(unspents)
     }
 }
 
@@ -357,6 +383,28 @@ pub struct GetDescriptorInfoResponse {
 pub enum ScanProgress {
     Bool(bool),
     Progress { duration: u32, progress: f64 },
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Unspent {
+    #[serde(rename = "txid")]
+    pub tx_id: Txid,
+    pub vout: u32,
+    pub address: Address,
+    pub label: String,
+    #[serde(rename = "scriptPubKey")]
+    pub script_pub_key: String,
+    pub amount: f64,
+    pub confirmations: u64,
+    #[serde(rename = "redeemScript")]
+    pub redeem_script: Option<String>,
+    #[serde(rename = "witnessScript")]
+    pub witness_script: Option<String>,
+    pub spendable: bool,
+    pub solvable: bool,
+    pub reused: Option<bool>,
+    pub desc: String,
+    pub safe: bool,
 }
 
 #[cfg(all(test, feature = "test-docker"))]
