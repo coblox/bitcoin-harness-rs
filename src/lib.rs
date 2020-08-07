@@ -18,26 +18,59 @@
 //! Note: It uses tokio.
 //!
 //! # Examples
+//!
+//! ## Just connect to bitcoind and get the network
+//!
 //! ```rust
+//! use bitcoin_harness::{Bitcoind, bitcoind_rpc, Client};
+//!
 //! # #[tokio::main]
 //! # async fn main() {
 //! let tc_client = testcontainers::clients::Cli::default();
-//! let bitcoind = bitcoin_harness::Bitcoind::new(&tc_client, "0.20.0").unwrap();
-//! let client = bitcoin_harness::bitcoind_rpc::Client::new(bitcoind.node_url);
+//! let bitcoind = Bitcoind::new(&tc_client, "0.20.0").unwrap();
+//! let client = Client::new(bitcoind.node_url);
 //! let network = client.network().await.unwrap();
 //!
 //! assert_eq!(network, bitcoin::Network::Regtest)
 //! # }
 //! ```
 //!
+//! ## Create a wallet and fund it
+//!
+//! ```rust
+//! use bitcoin_harness::{Bitcoind, bitcoind_rpc, Client, Wallet};
+//!
+//! # #[tokio::main]
+//! # async fn main() {
+//! let tc_client = testcontainers::clients::Cli::default();
+//! let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+//! let client = Client::new(bitcoind.node_url.clone());
+//!
+//! bitcoind.init(5).await.unwrap();
+//!
+//! let wallet = Wallet::new("my_wallet", bitcoind.node_url.clone()).await.unwrap();
+//! let address = wallet.new_address().await.unwrap();
+//! let amount = bitcoin::Amount::from_btc(3.0).unwrap();
+//!
+//! bitcoind.mint(address, amount).await.unwrap();
+//!
+//! let balance = wallet.balance().await.unwrap();
+//!
+//! assert_eq!(balance, amount)
+//!
+//! # }
+//! ```
 
 pub mod bitcoind_rpc;
 pub mod json_rpc;
+pub mod wallet;
 
-use crate::bitcoind_rpc::Client;
 use reqwest::Url;
 use std::time::Duration;
 use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container, Docker};
+
+pub use crate::bitcoind_rpc::Client;
+pub use crate::wallet::Wallet;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -102,6 +135,14 @@ impl<'c> Bitcoind<'c> {
 
         bitcoind_client
             .send_to_address(&self.wallet_name, address.clone(), amount)
+            .await?;
+
+        // Confirm the transaction
+        let reward_address = bitcoind_client
+            .get_new_address(&self.wallet_name, None, None)
+            .await?;
+        bitcoind_client
+            .generate_to_address(1, reward_address, None)
             .await?;
 
         Ok(())
