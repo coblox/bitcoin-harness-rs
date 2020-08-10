@@ -1,4 +1,4 @@
-use crate::bitcoind_rpc::{Client, Result, Unspent, WalletInfoResponse};
+use crate::bitcoind_rpc::{AddressInfo, Client, Result, Unspent, WalletInfoResponse};
 use bitcoin::{Address, Amount, Transaction, Txid};
 use url::Url;
 
@@ -68,6 +68,10 @@ impl Wallet {
         self.bitcoind_client
             .get_raw_transaction(&self.name, txid)
             .await
+    }
+
+    pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
+        self.bitcoind_client.address_info(&self.name, address).await
     }
 
     pub async fn list_unspent(&self) -> Result<Vec<Unspent>> {

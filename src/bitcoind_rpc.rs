@@ -312,6 +312,21 @@ impl Client {
             .await?;
         Ok(unspents)
     }
+
+    pub async fn address_info(&self, wallet_name: &str, address: &Address) -> Result<AddressInfo> {
+        let address_info = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "getaddressinfo",
+                    vec![json_rpc::serialize(address.to_string())?],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(address_info)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -406,6 +421,36 @@ pub struct Unspent {
     pub reused: Option<bool>,
     pub desc: String,
     pub safe: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct AddressInfo {
+    pub address: Address,
+    #[serde(rename = "scriptPubKey")]
+    pub script_pub_key: Script,
+    #[serde(rename = "ismine")]
+    pub is_mine: bool,
+    pub solvable: bool,
+    pub desc: String,
+    #[serde(rename = "iswatchonly")]
+    pub is_watch_only: bool,
+    #[serde(rename = "isscript")]
+    pub is_script: bool,
+    #[serde(rename = "iswitness")]
+    pub is_witness: bool,
+    pub witness_version: u64,
+    pub witness_program: String,
+    pub pubkey: String,
+    #[serde(rename = "ischange")]
+    pub is_change: bool,
+    pub timestamp: u64,
+    #[serde(rename = "hdkeypath")]
+    pub hd_key_path: String,
+    #[serde(rename = "hdseedid")]
+    pub hd_seedid: String,
+    #[serde(rename = "hdmasterfingerprint")]
+    pub hd_master_fingerprint: String,
+    pub labels: Vec<String>,
 }
 
 #[cfg(all(test, feature = "test-docker"))]
