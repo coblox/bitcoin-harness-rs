@@ -3,7 +3,7 @@
 use crate::json_rpc;
 use ::bitcoin::{consensus::encode::serialize_hex, hashes::hex::FromHex, Transaction, Txid};
 use ::bitcoin::{Address, Amount, Network};
-use bitcoin::{PublicKey, Script};
+use bitcoin::Script;
 use reqwest::Url;
 use serde::Deserialize;
 
