@@ -3,6 +3,7 @@
 use crate::json_rpc;
 use ::bitcoin::{consensus::encode::serialize_hex, hashes::hex::FromHex, Transaction, Txid};
 use ::bitcoin::{Address, Amount, Network};
+use bitcoin::{PublicKey, Script};
 use reqwest::Url;
 use serde::Deserialize;
 
@@ -410,14 +411,14 @@ pub struct Unspent {
 #[cfg(all(test, feature = "test-docker"))]
 mod test {
     use super::*;
-    use crate::test_harness::bitcoin;
+    use crate::Bitcoind;
     use testcontainers::clients;
 
     #[tokio::test]
     async fn get_network_info() {
         let client = {
             let tc_client = clients::Cli::default();
-            let blockchain = bitcoin::Blockchain::new(&tc_client).unwrap();
+            let blockchain = Bitcoind::new(&tc_client, "0.19.1").unwrap();
 
             Client::new(blockchain.node_url)
         };
