@@ -10,7 +10,6 @@
     clippy::cast_possible_wrap,
     clippy::dbg_macro
 )]
-#![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![forbid(unsafe_code)]
 
 //! # bitcoin-harness
