@@ -492,32 +492,21 @@ pub struct AddressInfo {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CreateFundedPsbtOptions {
-    #[serde(rename = "changeAddress", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "changeAddress")]
     pub change_address: Option<Address>,
-    #[serde(rename = "changePosition", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "changePosition")]
     pub change_position: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub change_type: Option<AddressType>,
-    #[serde(rename = "includeWatching", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "includeWatching")]
     pub include_watching: Option<bool>,
-    #[serde(rename = "lockUnspents", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "lockUnspents")]
     pub lock_unspent: Option<bool>,
-    #[serde(
-        rename = "feeRate",
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::util::amount::serde::as_btc::opt"
-    )]
+    #[serde(rename = "feeRate", with = "bitcoin::util::amount::serde::as_btc::opt")]
     pub fee_rate: Option<Amount>,
-    #[serde(
-        rename = "subtractFeeFromOutputs",
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(rename = "subtractFeeFromOutputs")]
     pub subtract_fee_from_outputs: Vec<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub replaceable: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub conf_target: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub estimate_mode: Option<EstimateMode>,
 }
 
