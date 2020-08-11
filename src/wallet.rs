@@ -1,5 +1,9 @@
-use crate::bitcoind_rpc::{AddressInfo, Client, Result, Unspent, WalletInfoResponse};
+use crate::bitcoind_rpc::{
+    AddressInfo, Client, CreateFundedPsbtOptions, CreateFundedPsbtResult, Result, Unspent,
+    WalletCreateFundedPsbtInput, WalletInfoResponse,
+};
 use bitcoin::{Address, Amount, Transaction, Txid};
+use std::collections::HashMap;
 use url::Url;
 
 /// A wrapper to bitcoind wallet
@@ -78,5 +82,65 @@ impl Wallet {
         self.bitcoind_client
             .list_unspent(&self.name, None, None, None, None)
             .await
+    }
+
+    pub async fn wallet_create_funded_psbt(
+        &self,
+        tx_ins: &[WalletCreateFundedPsbtInput],
+        outputs: &HashMap<String, Amount>,
+        locktime: Option<i64>,
+        options: Option<CreateFundedPsbtOptions>,
+        bip32derivs: Option<bool>,
+    ) -> Result<CreateFundedPsbtResult> {
+        self.bitcoind_client
+            .wallet_create_funded_psbt(&self.name, tx_ins, outputs, locktime, options, bip32derivs)
+            .await
+    }
+}
+
+#[cfg(all(test, feature = "test-docker"))]
+mod test {
+    use super::*;
+    use crate::Bitcoind;
+    use bitcoin::util::psbt::PartiallySignedTransaction;
+    use testcontainers::clients;
+
+    #[tokio::test]
+    async fn partial_signed_transaction_test() {
+        let wallet = {
+            let tc_client = clients::Cli::default();
+            let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+            bitcoind.init(5).await.unwrap();
+
+            let wallet = Wallet::new("test_wallet", bitcoind.node_url.clone())
+                .await
+                .unwrap();
+
+            let address = wallet.new_address().await.unwrap();
+            let amount = bitcoin::Amount::from_btc(3.0).unwrap();
+            bitcoind.mint(address, amount).await.unwrap();
+            wallet
+        };
+
+        let address = wallet.new_address().await.unwrap();
+        let mut output = HashMap::new();
+        output.insert(address.to_string(), Amount::from_btc(1.1337).unwrap());
+        let result = wallet
+            .wallet_create_funded_psbt(&[], &output, None, None, None)
+            .await
+            .unwrap();
+        let hex = base64::decode(result.psbt.clone()).unwrap();
+        let psbt: PartiallySignedTransaction = bitcoin::consensus::deserialize(&hex).unwrap();
+
+        assert_eq!(
+            psbt.inputs.len(),
+            1,
+            "Should have 1 input as the wallet only has 1 tx"
+        );
+        assert_eq!(
+            psbt.outputs.len(),
+            2,
+            "Should have 2 outputs, 1 for the target and one change"
+        );
     }
 }

@@ -6,6 +6,9 @@ use ::bitcoin::{Address, Amount, Network};
 use bitcoin::Script;
 use reqwest::Url;
 use serde::Deserialize;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::iter::FromIterator;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -327,6 +330,40 @@ impl Client {
             .await?;
         Ok(address_info)
     }
+
+    pub async fn wallet_create_funded_psbt(
+        &self,
+        wallet_name: &str,
+        tx_ins: &[WalletCreateFundedPsbtInput],
+        outputs: &HashMap<String, Amount>,
+        locktime: Option<i64>,
+        options: Option<CreateFundedPsbtOptions>,
+        bip32derivs: Option<bool>,
+    ) -> Result<CreateFundedPsbtResult> {
+        let outputs_converted = serde_json::Map::from_iter(
+            outputs
+                .iter()
+                .map(|(k, v)| (k.clone(), serde_json::Value::from(v.as_btc()))),
+        );
+        let address_info = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "walletcreatefundedpsbt",
+                    vec![
+                        json_rpc::serialize(tx_ins)?,
+                        json_rpc::serialize(outputs_converted)?,
+                        json_rpc::serialize(locktime)?,
+                        json_rpc::serialize(options)?,
+                        json_rpc::serialize(bip32derivs)?,
+                    ],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(address_info)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -451,6 +488,71 @@ pub struct AddressInfo {
     #[serde(rename = "hdmasterfingerprint")]
     pub hd_master_fingerprint: String,
     pub labels: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct CreateFundedPsbtOptions {
+    #[serde(rename = "changeAddress", skip_serializing_if = "Option::is_none")]
+    pub change_address: Option<Address>,
+    #[serde(rename = "changePosition", skip_serializing_if = "Option::is_none")]
+    pub change_position: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_type: Option<AddressType>,
+    #[serde(rename = "includeWatching", skip_serializing_if = "Option::is_none")]
+    pub include_watching: Option<bool>,
+    #[serde(rename = "lockUnspents", skip_serializing_if = "Option::is_none")]
+    pub lock_unspent: Option<bool>,
+    #[serde(
+        rename = "feeRate",
+        skip_serializing_if = "Option::is_none",
+        with = "bitcoin::util::amount::serde::as_btc::opt"
+    )]
+    pub fee_rate: Option<Amount>,
+    #[serde(
+        rename = "subtractFeeFromOutputs",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub subtract_fee_from_outputs: Vec<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaceable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conf_target: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimate_mode: Option<EstimateMode>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+pub struct CreateFundedPsbtResult {
+    pub psbt: String,
+    #[serde(with = "bitcoin::util::amount::serde::as_btc")]
+    pub fee: Amount,
+    #[serde(rename = "changepos")]
+    pub change_position: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum EstimateMode {
+    Unset,
+    Economical,
+    Conservative,
+}
+
+#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletCreateFundedPsbtInput {
+    pub txid: bitcoin::Txid,
+    pub vout: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<u32>,
+}
+
+#[derive(Copy, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum AddressType {
+    Legacy,
+    P2shSegwit,
+    Bech32,
 }
 
 #[cfg(all(test, feature = "test-docker"))]
