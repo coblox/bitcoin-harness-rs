@@ -6,48 +6,51 @@ use bitcoincore_rpc::RawTx;
 use bitcoincore_rpc::RpcApi;
 use std::result;
 
-/// A wrapper to bitcoind wallet
-#[derive(Debug)]
-pub struct Wallet {
-    pub bitcoind_client: bitcoincore_rpc::Client,
-}
-
 pub type Result<T> = result::Result<T, bitcoincore_rpc::Error>;
 
-impl Wallet {
-    pub fn new(bitcoind_client: bitcoincore_rpc::Client) -> Self {
-        Self { bitcoind_client }
-    }
+/// A wrapper to bitcoincore_rpc client
+#[derive(Debug)]
+pub struct Wallet(bitcoincore_rpc::Client);
 
+impl Wallet {
     pub fn new_address(&self) -> Result<Address> {
-        self.bitcoind_client
-            .get_new_address(None, Some(AddressType::Bech32))
+        self.0.get_new_address(None, Some(AddressType::Bech32))
     }
 
     pub fn balance(&self) -> Result<Amount> {
-        self.bitcoind_client.get_balance(None, None)
+        self.0.get_balance(None, None)
     }
 
     pub fn send_to_address(&self, address: &Address, amount: Amount) -> Result<Txid> {
-        self.bitcoind_client
+        self.0
             .send_to_address(address, amount, None, None, None, None, None, None)
     }
 
     pub fn send_raw_transaction(&self, transaction: Transaction) -> Result<Txid> {
-        self.bitcoind_client
-            .send_raw_transaction(transaction.raw_hex())
+        self.0.send_raw_transaction(transaction.raw_hex())
     }
 
     pub fn get_raw_transaction(&self, txid: &Txid) -> Result<Transaction> {
-        self.bitcoind_client.get_raw_transaction(txid, None)
+        self.0.get_raw_transaction(txid, None)
     }
 
     pub fn address_info(&self, address: &Address) -> Result<GetAddressInfoResult> {
-        self.bitcoind_client.get_address_info(address)
+        self.0.get_address_info(address)
     }
 
     pub fn list_unspent(&self) -> Result<Vec<ListUnspentResultEntry>> {
-        self.bitcoind_client
-            .list_unspent(None, None, None, None, None)
+        self.0.list_unspent(None, None, None, None, None)
+    }
+}
+
+impl From<bitcoincore_rpc::Client> for Wallet {
+    fn from(client: bitcoincore_rpc::Client) -> Self {
+        Self(client)
+    }
+}
+
+impl From<Wallet> for bitcoincore_rpc::Client {
+    fn from(wallet: Wallet) -> Self {
+        wallet.0
     }
 }

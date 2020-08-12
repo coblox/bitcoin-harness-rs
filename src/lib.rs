@@ -143,7 +143,7 @@ impl<'c> Bitcoind<'c> {
         let wallet_client =
             bitcoincore_rpc::Client::new(url.to_string(), self.auth.clone()).unwrap();
 
-        Ok(Wallet::new(wallet_client))
+        Ok(Wallet::from(wallet_client))
     }
 
     /// Send Bitcoin to the specified address, limited to the spendable bitcoin quantity.
