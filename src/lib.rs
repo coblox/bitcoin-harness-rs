@@ -66,12 +66,12 @@
 
 pub mod wallet;
 
-use reqwest::Url;
 use std::time::Duration;
 use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container, Docker};
 
 pub use crate::wallet::Wallet;
 use bitcoincore_rpc::RpcApi;
+use url::Url;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
