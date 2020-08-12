@@ -1,82 +1,73 @@
-use crate::bitcoind_rpc::{AddressInfo, Client, Result, Unspent, WalletInfoResponse};
 use bitcoin::{Address, Amount, Transaction, Txid};
+use bitcoincore_rpc::bitcoincore_rpc_json::{
+    AddressType, GetAddressInfoResult, ListUnspentResultEntry, LoadWalletResult,
+};
+use bitcoincore_rpc::RawTx;
+use bitcoincore_rpc::RpcApi;
+use std::result;
 use url::Url;
 
 /// A wrapper to bitcoind wallet
 #[derive(Debug)]
 pub struct Wallet {
     name: String,
-    bitcoind_client: Client,
+    pub bitcoind_client: bitcoincore_rpc::Client,
 }
+
+pub type Result<T> = result::Result<T, bitcoincore_rpc::Error>;
 
 impl Wallet {
     /// Create a wallet on the bitcoind instance or use the wallet with the same name
     /// if it exists.
-    pub async fn new(name: &str, url: Url) -> Result<Self> {
-        let bitcoind_client = Client::new(url);
+    pub fn new(name: &str, url: &Url, auth: &bitcoincore_rpc::Auth) -> Result<Self> {
+        let bitcoind_client = bitcoincore_rpc::Client::new(url.to_string(), auth.clone()).unwrap();
+        let mut url = url.clone();
+        url.set_path(format!("wallet/{}", name).as_str());
+        let wallet_client = bitcoincore_rpc::Client::new(url.to_string(), auth.clone()).unwrap();
 
         let wallet = Self {
             name: name.to_string(),
-            bitcoind_client,
+            bitcoind_client: wallet_client,
         };
 
-        wallet.init().await?;
+        wallet.init(bitcoind_client)?;
 
         Ok(wallet)
     }
 
-    async fn init(&self) -> Result<()> {
-        match self.info().await {
-            Err(_) => self
-                .bitcoind_client
-                .create_wallet(&self.name, None, None, None, None)
-                .await
-                .map(|_| ()),
-            Ok(_) => Ok(()),
-        }
+    fn init(&self, bitcoind_client: bitcoincore_rpc::Client) -> Result<LoadWalletResult> {
+        bitcoind_client.create_wallet(&self.name, None)
     }
 
-    pub async fn info(&self) -> Result<WalletInfoResponse> {
-        Ok(self.bitcoind_client.get_wallet_info(&self.name).await?)
-    }
-
-    pub async fn new_address(&self) -> Result<Address> {
+    pub fn new_address(&self) -> Result<Address> {
         self.bitcoind_client
-            .get_new_address(&self.name, None, Some("bech32".into()))
-            .await
+            .get_new_address(None, Some(AddressType::Bech32))
     }
 
-    pub async fn balance(&self) -> Result<Amount> {
+    pub fn balance(&self) -> Result<Amount> {
+        self.bitcoind_client.get_balance(None, None)
+    }
+
+    pub fn send_to_address(&self, address: &Address, amount: Amount) -> Result<Txid> {
         self.bitcoind_client
-            .get_balance(&self.name, None, None, None)
-            .await
+            .send_to_address(address, amount, None, None, None, None, None, None)
     }
 
-    pub async fn send_to_address(&self, address: Address, amount: Amount) -> Result<Txid> {
+    pub fn send_raw_transaction(&self, transaction: Transaction) -> Result<Txid> {
         self.bitcoind_client
-            .send_to_address(&self.name, address, amount)
-            .await
+            .send_raw_transaction(transaction.raw_hex())
     }
 
-    pub async fn send_raw_transaction(&self, transaction: Transaction) -> Result<Txid> {
+    pub fn get_raw_transaction(&self, txid: &Txid) -> Result<Transaction> {
+        self.bitcoind_client.get_raw_transaction(txid, None)
+    }
+
+    pub fn address_info(&self, address: &Address) -> Result<GetAddressInfoResult> {
+        self.bitcoind_client.get_address_info(address)
+    }
+
+    pub fn list_unspent(&self) -> Result<Vec<ListUnspentResultEntry>> {
         self.bitcoind_client
-            .send_raw_transaction(&self.name, transaction)
-            .await
-    }
-
-    pub async fn get_raw_transaction(&self, txid: Txid) -> Result<Transaction> {
-        self.bitcoind_client
-            .get_raw_transaction(&self.name, txid)
-            .await
-    }
-
-    pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
-        self.bitcoind_client.address_info(&self.name, address).await
-    }
-
-    pub async fn list_unspent(&self) -> Result<Vec<Unspent>> {
-        self.bitcoind_client
-            .list_unspent(&self.name, None, None, None, None)
-            .await
+            .list_unspent(None, None, None, None, None)
     }
 }
