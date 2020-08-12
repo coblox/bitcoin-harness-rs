@@ -147,9 +147,21 @@ impl<'c> Bitcoind<'c> {
     }
 
     /// Send Bitcoin to the specified address, limited to the spendable bitcoin quantity.
-    pub async fn mint(&self, address: &bitcoin::Address, amount: bitcoin::Amount) -> Result<()> {
-        self.miner_wallet_client
+    pub async fn mint(
+        &self,
+        address: &bitcoin::Address,
+        amount: bitcoin::Amount,
+    ) -> Result<bitcoin::Transaction> {
+        let tx_id = self
+            .miner_wallet_client
             .send_to_address(address, amount, None, None, None, None, None, None)
+            .unwrap();
+
+        let transaction = self
+            .miner_wallet_client
+            .get_transaction(&tx_id, None)
+            .unwrap()
+            .transaction()
             .unwrap();
 
         // Confirm the transaction
@@ -161,7 +173,7 @@ impl<'c> Bitcoind<'c> {
             .generate_to_address(1, &reward_address)
             .unwrap();
 
-        Ok(())
+        Ok(transaction)
     }
 
     pub fn container_id(&self) -> &str {
