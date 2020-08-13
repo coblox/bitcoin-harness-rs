@@ -3,9 +3,11 @@
 use crate::json_rpc;
 use ::bitcoin::{consensus::encode::serialize_hex, hashes::hex::FromHex, Transaction, Txid};
 use ::bitcoin::{Address, Amount, Network};
+use bitcoin::consensus::encode;
 use bitcoin::Script;
 use reqwest::Url;
 use serde::Deserialize;
+use serde::Serialize;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -313,6 +315,86 @@ impl Client {
         Ok(unspents)
     }
 
+    pub async fn fund_psbt(
+        &self,
+        wallet_name: &str,
+        inputs: &[bitcoincore_rpc_json::CreateRawTransactionInput],
+        address: Address,
+        amount: Amount,
+    ) -> Result<String> {
+        let mut outputs_converted = serde_json::Map::new();
+        outputs_converted.insert(
+            address.to_string(),
+            serde_json::Value::from(amount.as_btc()),
+        );
+        let psbt: bitcoincore_rpc_json::WalletCreateFundedPsbtResult = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "walletcreatefundedpsbt",
+                    vec![
+                        json_rpc::serialize(inputs)?,
+                        json_rpc::serialize(outputs_converted)?,
+                    ],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(psbt.psbt)
+    }
+
+    pub async fn join_psbts(&self, wallet_name: &str, psbts: &[String]) -> Result<PsbtBase64> {
+        let psbt = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "joinpsbts",
+                    vec![json_rpc::serialize(psbts)?],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(psbt)
+    }
+    pub async fn wallet_process_psbt(
+        &self,
+        wallet_name: &str,
+        psbt: PsbtBase64,
+    ) -> Result<ProcessedPsbt> {
+        let psbt = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "walletprocesspsbt",
+                    vec![json_rpc::serialize(psbt)?],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(psbt)
+    }
+    pub async fn finalize_psbt(
+        &self,
+        wallet_name: &str,
+        psbt: PsbtBase64,
+    ) -> Result<FinalizedPsbt> {
+        let psbt = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "finalizepsbt",
+                    vec![json_rpc::serialize(psbt)?],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+        Ok(psbt)
+    }
+
     pub async fn address_info(&self, wallet_name: &str, address: &Address) -> Result<AddressInfo> {
         let address_info = self
             .rpc_client
@@ -344,6 +426,40 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 struct BlockchainInfo {
     chain: Network,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PsbtBase64(pub String);
+
+impl From<ProcessedPsbt> for PsbtBase64 {
+    fn from(processed_psbt: ProcessedPsbt) -> Self {
+        Self(processed_psbt.psbt)
+    }
+}
+impl From<String> for PsbtBase64 {
+    fn from(base64_string: String) -> Self {
+        Self(base64_string)
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ProcessedPsbt {
+    psbt: String,
+    complete: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FinalizedPsbt {
+    hex: String,
+    complete: bool,
+}
+
+impl FinalizedPsbt {
+    pub fn transaction(&self) -> Result<Transaction> {
+        let data = hex::decode(&self.hex).unwrap();
+        let transaction = encode::deserialize(data.as_slice())?;
+        Ok(transaction)
+    }
 }
 
 #[derive(Debug, Deserialize)]
