@@ -1,4 +1,7 @@
-use crate::bitcoind_rpc::{AddressInfo, Client, Result, Unspent, WalletInfoResponse};
+use crate::bitcoind_rpc::{
+    AddressInfo, Client, FinalizedPsbt, ProcessedPsbt, PsbtBase64, Result, Unspent,
+    WalletInfoResponse,
+};
 use bitcoin::{Address, Amount, Transaction, Txid};
 use url::Url;
 
@@ -78,5 +81,122 @@ impl Wallet {
         self.bitcoind_client
             .list_unspent(&self.name, None, None, None, None)
             .await
+    }
+
+    pub async fn fund_psbt(&self, address: Address, amount: Amount) -> Result<String> {
+        self.bitcoind_client
+            .fund_psbt(&self.name, &[], address, amount)
+            .await
+    }
+
+    pub async fn join_psbts(&self, psbts: &[String]) -> Result<PsbtBase64> {
+        self.bitcoind_client.join_psbts(&self.name, psbts).await
+    }
+
+    pub async fn wallet_process_psbt(&self, psbt: PsbtBase64) -> Result<ProcessedPsbt> {
+        self.bitcoind_client
+            .wallet_process_psbt(&self.name, psbt)
+            .await
+    }
+
+    pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizedPsbt> {
+        self.bitcoind_client.finalize_psbt(&self.name, psbt).await
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{Bitcoind, Wallet};
+    use bitcoin::util::psbt::PartiallySignedTransaction;
+    use bitcoin::{Amount, Transaction, TxOut};
+
+    #[tokio::test]
+    async fn two_party_psbt_test() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let alice = Wallet::new("alice", bitcoind.node_url.clone())
+            .await
+            .unwrap();
+        let address = alice.new_address().await.unwrap();
+        let amount = bitcoin::Amount::from_btc(3.0).unwrap();
+        bitcoind.mint(address, amount).await.unwrap();
+        let joined_address = alice.new_address().await.unwrap();
+        let alice_result = alice
+            .fund_psbt(joined_address.clone(), Amount::from_btc(1.0).unwrap())
+            .await
+            .unwrap();
+
+        let bob = Wallet::new("bob", bitcoind.node_url.clone()).await.unwrap();
+        let address = bob.new_address().await.unwrap();
+        let amount = bitcoin::Amount::from_btc(3.0).unwrap();
+        bitcoind.mint(address, amount).await.unwrap();
+        let bob_psbt = bob
+            .fund_psbt(joined_address.clone(), Amount::from_btc(1.0).unwrap())
+            .await
+            .unwrap();
+
+        let joined_psbts = alice
+            .join_psbts(&[alice_result.clone(), bob_psbt.clone()])
+            .await
+            .unwrap();
+
+        let partial_signed_bitcoin_transaction: PartiallySignedTransaction = {
+            let as_hex = base64::decode(joined_psbts.0).unwrap();
+            bitcoin::consensus::deserialize(&as_hex).unwrap()
+        };
+
+        let transaction = partial_signed_bitcoin_transaction.extract_tx();
+        let mut outputs = vec![];
+
+        transaction.output.iter().for_each(|output| {
+            // filter out shared output
+            if output.script_pubkey != joined_address.clone().script_pubkey() {
+                outputs.push(output.clone());
+            }
+        });
+        // add shared output with twice the btc to fit change addresses
+        outputs.push(TxOut {
+            value: Amount::from_btc(2.0).unwrap().as_sat(),
+            script_pubkey: joined_address.clone().script_pubkey(),
+        });
+
+        let transaction = Transaction {
+            output: outputs,
+            ..transaction
+        };
+
+        assert_eq!(
+            transaction.input.len(),
+            2,
+            "We expect 2 inputs, one from alice, one from bob"
+        );
+        assert_eq!(
+            transaction.output.len(),
+            3,
+            "We expect 3 outputs, change for alice, change for bob and shared address"
+        );
+
+        let psbt = {
+            let partial_signed_bitcoin_transaction =
+                PartiallySignedTransaction::from_unsigned_tx(transaction).unwrap();
+            let hex_vec = bitcoin::consensus::serialize(&partial_signed_bitcoin_transaction);
+            base64::encode(hex_vec).into()
+        };
+
+        let alice_signed_psbt = alice.wallet_process_psbt(psbt).await.unwrap();
+        let bob_signed_psbt = bob
+            .wallet_process_psbt(alice_signed_psbt.into())
+            .await
+            .unwrap();
+
+        let alice_finalized_psbt = alice.finalize_psbt(bob_signed_psbt.into()).await.unwrap();
+
+        let txid = alice
+            .send_raw_transaction(alice_finalized_psbt.transaction().unwrap())
+            .await
+            .unwrap();
+        println!("Final tx_id: {:?}", txid);
     }
 }
