@@ -1,13 +1,13 @@
 //! An incomplete async bitcoind rpc client that support multi-wallet features
 
 use crate::json_rpc;
-use ::bitcoin::{consensus::encode::serialize_hex, hashes::hex::FromHex, Transaction, Txid};
-use ::bitcoin::{Address, Amount, Network};
-use bitcoin::consensus::encode;
-use bitcoin::Script;
+use ::bitcoin::{
+    consensus::encode::serialize_hex, hashes::hex::FromHex, Address, Amount, Network, Transaction,
+    Txid,
+};
+use bitcoin::{consensus::encode, Script};
 use reqwest::Url;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -26,6 +26,18 @@ impl Client {
     }
 
     pub async fn network(&self) -> Result<Network> {
+        let blockchain_info = self.blockchain_info().await?;
+
+        Ok(blockchain_info.chain)
+    }
+
+    pub async fn median_time(&self) -> Result<u32> {
+        let blockchain_info = self.blockchain_info().await?;
+
+        Ok(blockchain_info.mediantime)
+    }
+
+    async fn blockchain_info(&self) -> Result<BlockchainInfo> {
         let blockchain_info = self
             .rpc_client
             .send::<Vec<()>, BlockchainInfo>(json_rpc::Request::new(
@@ -35,7 +47,7 @@ impl Client {
             ))
             .await?;
 
-        Ok(blockchain_info.chain)
+        Ok(blockchain_info)
     }
 
     pub async fn create_wallet(
@@ -426,6 +438,7 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 struct BlockchainInfo {
     chain: Network,
+    mediantime: u32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -587,6 +600,18 @@ mod test {
         let network = client.network().await.unwrap();
 
         assert_eq!(network, Network::Regtest)
+    }
+
+    #[tokio::test]
+    async fn get_median_time() {
+        let client = {
+            let tc_client = clients::Cli::default();
+            let blockchain = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+
+            Client::new(blockchain.node_url)
+        };
+
+        let _mediant_time = client.median_time().await.unwrap();
     }
 
     #[test]

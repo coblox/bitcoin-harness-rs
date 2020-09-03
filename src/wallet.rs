@@ -43,6 +43,10 @@ impl Wallet {
         Ok(self.bitcoind_client.get_wallet_info(&self.name).await?)
     }
 
+    pub async fn median_time(&self) -> Result<u32> {
+        Ok(self.bitcoind_client.median_time().await?)
+    }
+
     pub async fn new_address(&self) -> Result<Address> {
         self.bitcoind_client
             .get_new_address(&self.name, None, Some("bech32".into()))
