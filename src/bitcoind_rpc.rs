@@ -222,6 +222,26 @@ impl Client {
         Ok(transaction)
     }
 
+    pub async fn get_transaction(
+        &self,
+        wallet_name: &str,
+        txid: Txid,
+    ) -> Result<WalletTransactionInfo> {
+        let res = self
+            .rpc_client
+            .send_with_path(
+                format!("/wallet/{}", wallet_name),
+                json_rpc::Request::new(
+                    "gettransaction",
+                    vec![json_rpc::serialize(txid)?],
+                    JSONRPC_VERSION.into(),
+                ),
+            )
+            .await?;
+
+        Ok(res)
+    }
+
     pub async fn dump_wallet(&self, wallet_name: &str, filename: &std::path::Path) -> Result<()> {
         let _: DumpWalletResponse = self
             .rpc_client
@@ -580,6 +600,16 @@ pub struct AddressInfo {
     #[serde(rename = "hdmasterfingerprint")]
     pub hd_master_fingerprint: String,
     pub labels: Vec<String>,
+}
+
+/// Response to the RPC command `gettransaction`.
+///
+/// It only defines one field, but can be expanded to include all the
+/// fields returned by `bitcoind` (see:
+/// https://bitcoincore.org/en/doc/0.19.0/rpc/wallet/gettransaction/)
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct WalletTransactionInfo {
+    pub fee: f64,
 }
 
 #[cfg(all(test, feature = "test-docker"))]

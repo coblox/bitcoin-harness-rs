@@ -1,6 +1,6 @@
 use crate::bitcoind_rpc::{
     AddressInfo, Client, FinalizedPsbt, ProcessedPsbt, PsbtBase64, Result, Unspent,
-    WalletInfoResponse,
+    WalletInfoResponse, WalletTransactionInfo,
 };
 use bitcoin::{Address, Amount, Transaction, Txid};
 use url::Url;
@@ -77,6 +77,10 @@ impl Wallet {
             .await
     }
 
+    pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<WalletTransactionInfo> {
+        self.bitcoind_client.get_transaction(&self.name, txid).await
+    }
+
     pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
         self.bitcoind_client.address_info(&self.name, address).await
     }
@@ -113,6 +117,29 @@ mod test {
     use crate::{Bitcoind, Wallet};
     use bitcoin::util::psbt::PartiallySignedTransaction;
     use bitcoin::{Amount, Transaction, TxOut};
+
+    #[tokio::test]
+    async fn get_wallet_transaction() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
+            .await
+            .unwrap();
+        let mint_address = wallet.new_address().await.unwrap();
+        let mint_amount = bitcoin::Amount::from_btc(3.0).unwrap();
+        bitcoind.mint(mint_address, mint_amount).await.unwrap();
+
+        let pay_address = wallet.new_address().await.unwrap();
+        let pay_amount = bitcoin::Amount::from_btc(1.0).unwrap();
+        let txid = wallet
+            .send_to_address(pay_address, pay_amount)
+            .await
+            .unwrap();
+
+        let _res = wallet.get_wallet_transaction(txid).await.unwrap();
+    }
 
     #[tokio::test]
     async fn two_party_psbt_test() {
