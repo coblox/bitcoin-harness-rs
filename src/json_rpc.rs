@@ -43,6 +43,7 @@ impl Client {
             .await?;
 
         let response = response.bytes().await?;
+        dbg!(&response);
 
         let response: Response<Res> = match serde_json::from_slice(&response) {
             Ok(response) => response,
