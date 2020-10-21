@@ -37,6 +37,19 @@ impl Client {
         Ok(blockchain_info.mediantime)
     }
 
+    pub async fn block_height(&self) -> Result<u32> {
+        let block_height = self
+            .rpc_client
+            .send::<Vec<()>, _>(json_rpc::Request::new(
+                "getblockcount",
+                vec![],
+                JSONRPC_VERSION.into(),
+            ))
+            .await?;
+
+        Ok(block_height)
+    }
+
     async fn blockchain_info(&self) -> Result<BlockchainInfo> {
         let blockchain_info = self
             .rpc_client

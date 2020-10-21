@@ -47,6 +47,10 @@ impl Wallet {
         Ok(self.bitcoind_client.median_time().await?)
     }
 
+    pub async fn block_height(&self) -> Result<u32> {
+        Ok(self.bitcoind_client.block_height().await?)
+    }
+
     pub async fn new_address(&self) -> Result<Address> {
         self.bitcoind_client
             .get_new_address(&self.name, None, Some("bech32".into()))
@@ -114,9 +118,12 @@ impl Wallet {
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use crate::{Bitcoind, Wallet};
     use bitcoin::util::psbt::PartiallySignedTransaction;
     use bitcoin::{Amount, Transaction, TxOut};
+    use tokio::time::delay_for;
 
     #[tokio::test]
     async fn get_wallet_transaction() {
@@ -229,5 +236,23 @@ mod test {
             .await
             .unwrap();
         println!("Final tx_id: {:?}", txid);
+    }
+
+    #[tokio::test]
+    async fn block_height() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
+            .await
+            .unwrap();
+
+        let height_0 = wallet.block_height().await.unwrap();
+        delay_for(Duration::from_secs(2)).await;
+
+        let height_1 = wallet.block_height().await.unwrap();
+
+        assert!(height_1 > height_0)
     }
 }
