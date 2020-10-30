@@ -7,6 +7,7 @@ use ::bitcoin::{
 };
 use bitcoin::{consensus::encode, Script};
 use reqwest::Url;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -35,6 +36,19 @@ impl Client {
         let blockchain_info = self.blockchain_info().await?;
 
         Ok(blockchain_info.mediantime)
+    }
+
+    pub async fn block_height(&self) -> Result<u32> {
+        let block_height = self
+            .rpc_client
+            .send::<Vec<()>, _>(json_rpc::Request::new(
+                "getblockcount",
+                vec![],
+                JSONRPC_VERSION.into(),
+            ))
+            .await?;
+
+        Ok(block_height)
     }
 
     async fn blockchain_info(&self) -> Result<BlockchainInfo> {
@@ -204,22 +218,57 @@ impl Client {
         Ok(txid)
     }
 
-    pub async fn get_raw_transaction(&self, wallet_name: &str, txid: Txid) -> Result<Transaction> {
-        let hex: String = self
+    pub async fn get_raw_transaction(&self, txid: Txid) -> Result<Transaction> {
+        let hex: String = self.get_raw_transaction_rpc(txid, false).await?;
+        let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
+        let transaction = bitcoin::consensus::encode::deserialize(&bytes)?;
+
+        Ok(transaction)
+    }
+
+    pub async fn get_raw_transaction_verbose(
+        &self,
+        txid: Txid,
+    ) -> Result<GetRawTransactionVerboseResponse> {
+        let res = self.get_raw_transaction_rpc(txid, true).await?;
+
+        Ok(res)
+    }
+
+    async fn get_raw_transaction_rpc<R>(&self, txid: Txid, is_verbose: bool) -> Result<R>
+    where
+        R: std::fmt::Debug + DeserializeOwned,
+    {
+        let res = self
+            .rpc_client
+            .send(json_rpc::Request::new(
+                "getrawtransaction",
+                vec![json_rpc::serialize(txid)?, json_rpc::serialize(is_verbose)?],
+                JSONRPC_VERSION.into(),
+            ))
+            .await?;
+
+        Ok(res)
+    }
+
+    pub async fn get_transaction(
+        &self,
+        wallet_name: &str,
+        txid: Txid,
+    ) -> Result<WalletTransactionInfo> {
+        let res = self
             .rpc_client
             .send_with_path(
                 format!("/wallet/{}", wallet_name),
                 json_rpc::Request::new(
-                    "getrawtransaction",
+                    "gettransaction",
                     vec![json_rpc::serialize(txid)?],
                     JSONRPC_VERSION.into(),
                 ),
             )
             .await?;
-        let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
-        let transaction = bitcoin::consensus::encode::deserialize(&bytes)?;
 
-        Ok(transaction)
+        Ok(res)
     }
 
     pub async fn dump_wallet(&self, wallet_name: &str, filename: &std::path::Path) -> Result<()> {
@@ -421,6 +470,18 @@ impl Client {
             .await?;
         Ok(address_info)
     }
+
+    pub async fn get_block(&self, block_hash: &bitcoin::BlockHash) -> Result<GetBlockResponse> {
+        let res = self
+            .rpc_client
+            .send(json_rpc::Request::new(
+                "getblock",
+                vec![json_rpc::serialize(block_hash)?],
+                JSONRPC_VERSION.into(),
+            ))
+            .await?;
+        Ok(res)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -580,6 +641,38 @@ pub struct AddressInfo {
     #[serde(rename = "hdmasterfingerprint")]
     pub hd_master_fingerprint: String,
     pub labels: Vec<String>,
+}
+
+/// Response to the RPC command `gettransaction`.
+///
+/// It only defines one field, but can be expanded to include all the
+/// fields returned by `bitcoind` (see:
+/// https://bitcoincore.org/en/doc/0.19.0/rpc/wallet/gettransaction/)
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct WalletTransactionInfo {
+    pub fee: f64,
+}
+
+/// Response to the RPC command `getrawtransaction`, when the second
+/// argument is set to `true`.
+///
+/// It only defines one field, but can be expanded to include all the
+/// fields returned by `bitcoind` (see:
+/// https://bitcoincore.org/en/doc/0.19.0/rpc/rawtransactions/getrawtransaction/)
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct GetRawTransactionVerboseResponse {
+    #[serde(rename = "blockhash")]
+    pub block_hash: Option<bitcoin::BlockHash>,
+}
+
+/// Response to the RPC command `getblock`.
+///
+/// It only defines one field, but can be expanded to include all the
+/// fields returned by `bitcoind` (see:
+/// https://bitcoincore.org/en/doc/0.19.0/rpc/blockchain/getblock/)
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub struct GetBlockResponse {
+    pub height: u32,
 }
 
 #[cfg(all(test, feature = "test-docker"))]

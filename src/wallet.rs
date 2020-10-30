@@ -1,6 +1,6 @@
 use crate::bitcoind_rpc::{
     AddressInfo, Client, FinalizedPsbt, ProcessedPsbt, PsbtBase64, Result, Unspent,
-    WalletInfoResponse,
+    WalletInfoResponse, WalletTransactionInfo,
 };
 use bitcoin::{Address, Amount, Transaction, Txid};
 use url::Url;
@@ -47,6 +47,10 @@ impl Wallet {
         Ok(self.bitcoind_client.median_time().await?)
     }
 
+    pub async fn block_height(&self) -> Result<u32> {
+        Ok(self.bitcoind_client.block_height().await?)
+    }
+
     pub async fn new_address(&self) -> Result<Address> {
         self.bitcoind_client
             .get_new_address(&self.name, None, Some("bech32".into()))
@@ -72,9 +76,11 @@ impl Wallet {
     }
 
     pub async fn get_raw_transaction(&self, txid: Txid) -> Result<Transaction> {
-        self.bitcoind_client
-            .get_raw_transaction(&self.name, txid)
-            .await
+        self.bitcoind_client.get_raw_transaction(txid).await
+    }
+
+    pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<WalletTransactionInfo> {
+        self.bitcoind_client.get_transaction(&self.name, txid).await
     }
 
     pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
@@ -106,13 +112,55 @@ impl Wallet {
     pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizedPsbt> {
         self.bitcoind_client.finalize_psbt(&self.name, psbt).await
     }
+
+    pub async fn transaction_block_height(&self, txid: Txid) -> Result<Option<u32>> {
+        let res = self
+            .bitcoind_client
+            .get_raw_transaction_verbose(txid)
+            .await?;
+
+        let block_hash = match res.block_hash {
+            Some(block_hash) => block_hash,
+            None => return Ok(None),
+        };
+
+        let res = self.bitcoind_client.get_block(&block_hash).await?;
+
+        Ok(Some(res.height))
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use crate::{Bitcoind, Wallet};
     use bitcoin::util::psbt::PartiallySignedTransaction;
     use bitcoin::{Amount, Transaction, TxOut};
+    use tokio::time::delay_for;
+
+    #[tokio::test]
+    async fn get_wallet_transaction() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
+            .await
+            .unwrap();
+        let mint_address = wallet.new_address().await.unwrap();
+        let mint_amount = bitcoin::Amount::from_btc(3.0).unwrap();
+        bitcoind.mint(mint_address, mint_amount).await.unwrap();
+
+        let pay_address = wallet.new_address().await.unwrap();
+        let pay_amount = bitcoin::Amount::from_btc(1.0).unwrap();
+        let txid = wallet
+            .send_to_address(pay_address, pay_amount)
+            .await
+            .unwrap();
+
+        let _res = wallet.get_wallet_transaction(txid).await.unwrap();
+    }
 
     #[tokio::test]
     async fn two_party_psbt_test() {
@@ -202,5 +250,51 @@ mod test {
             .await
             .unwrap();
         println!("Final tx_id: {:?}", txid);
+    }
+
+    #[tokio::test]
+    async fn block_height() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
+            .await
+            .unwrap();
+
+        let height_0 = wallet.block_height().await.unwrap();
+        delay_for(Duration::from_secs(2)).await;
+
+        let height_1 = wallet.block_height().await.unwrap();
+
+        assert!(height_1 > height_0)
+    }
+
+    #[tokio::test]
+    async fn transaction_block_height() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
+            .await
+            .unwrap();
+        let mint_address = wallet.new_address().await.unwrap();
+        let mint_amount = bitcoin::Amount::from_btc(3.0).unwrap();
+        bitcoind.mint(mint_address, mint_amount).await.unwrap();
+
+        let pay_address = wallet.new_address().await.unwrap();
+        let pay_amount = bitcoin::Amount::from_btc(1.0).unwrap();
+        let txid = wallet
+            .send_to_address(pay_address, pay_amount)
+            .await
+            .unwrap();
+
+        // wait for the transaction to be included in a block, so that
+        // it has a block height field assigned to it when calling
+        // `getrawtransaction`
+        delay_for(Duration::from_secs(2)).await;
+
+        let _res = wallet.transaction_block_height(txid).await.unwrap();
     }
 }
