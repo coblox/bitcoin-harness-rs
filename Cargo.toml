@@ -13,7 +13,7 @@ hex = "0.4.2"
 reqwest = { version = "0.10", default-features = false, features = ["json", "native-tls"] }
 serde = "1.0"
 serde_json = "1.0"
-testcontainers = "0.10"
+testcontainers = "0.11"
 thiserror = "1.0"
 tokio = { version = "0.2", default-features = false, features = ["blocking", "macros", "rt-core", "time"] }
 tracing = "0.1"
