@@ -683,11 +683,11 @@ mod test {
 
     #[tokio::test]
     async fn get_network_info() {
-        let client = {
-            let tc_client = clients::Cli::default();
+        let tc_client = clients::Cli::default();
+        let (client, _container) = {
             let blockchain = Bitcoind::new(&tc_client, "0.19.1").unwrap();
 
-            Client::new(blockchain.node_url)
+            (Client::new(blockchain.node_url.clone()), blockchain)
         };
 
         let network = client.network().await.unwrap();
@@ -697,11 +697,11 @@ mod test {
 
     #[tokio::test]
     async fn get_median_time() {
-        let client = {
-            let tc_client = clients::Cli::default();
+        let tc_client = clients::Cli::default();
+        let (client, _container) = {
             let blockchain = Bitcoind::new(&tc_client, "0.19.1").unwrap();
 
-            Client::new(blockchain.node_url)
+            (Client::new(blockchain.node_url.clone()), blockchain)
         };
 
         let _mediant_time = client.median_time().await.unwrap();
