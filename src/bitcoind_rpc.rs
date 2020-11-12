@@ -1,11 +1,8 @@
-//! An incomplete async bitcoind rpc client that support multi-wallet features
+//! An incomplete async bitcoind rpc client that supports multi-wallet features
 
-use crate::bitcoind_rpc_api::{
-    Account, AddressInfoResponse, BitcoindRpcApi, FinalizePsbtResponse, GetTransactionResponse,
-    GetWalletInfoResponse, PsbtBase64, Unspent, WalletProcessPsbtResponse,
-};
+use crate::bitcoind_rpc_api::{BitcoindRpcApi, PsbtBase64, WalletProcessPsbtResponse};
 use ::bitcoin::{hashes::hex::FromHex, Address, Amount, Network, Transaction, Txid};
-use bitcoin::consensus::encode;
+use bitcoincore_rpc_json::{FinalizePsbtResult, GetAddressInfoResult};
 use jsonrpc_client::{JsonRpcError, ResponsePayload, SendRequest};
 use reqwest::Url;
 use serde::de::DeserializeOwned;
@@ -31,7 +28,7 @@ impl Client {
         }
     }
 
-    fn with_wallet(&self, wallet_name: &str) -> Result<Self> {
+    pub fn with_wallet(&self, wallet_name: &str) -> Result<Self> {
         Ok(Self {
             base_url: self
                 .base_url
@@ -43,33 +40,20 @@ impl Client {
     pub async fn network(&self) -> Result<Network> {
         let blockchain_info = self.getblockchaininfo().await?;
 
-        Ok(blockchain_info.chain)
+        let network = match blockchain_info.chain.as_str() {
+            "main" => Network::Bitcoin,
+            "test" => Network::Testnet,
+            "regtest" => Network::Regtest,
+            _ => return Err(Error::UnexpectedResponse),
+        };
+
+        Ok(network)
     }
 
-    pub async fn median_time(&self) -> Result<u32> {
+    pub async fn median_time(&self) -> Result<u64> {
         let blockchain_info = self.getblockchaininfo().await?;
 
         Ok(blockchain_info.median_time)
-    }
-
-    pub async fn get_balance(
-        &self,
-        wallet_name: &str,
-        minimum_confirmation: Option<u32>,
-        include_watch_only: Option<bool>,
-        avoid_reuse: Option<bool>,
-    ) -> Result<Amount> {
-        let response = self
-            .with_wallet(wallet_name)?
-            .getbalance(
-                Account,
-                minimum_confirmation,
-                include_watch_only,
-                avoid_reuse,
-            )
-            .await?;
-        let amount = Amount::from_btc(response)?;
-        Ok(amount)
     }
 
     pub async fn set_hd_seed(
@@ -85,24 +69,6 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_new_address(
-        &self,
-        wallet_name: &str,
-        label: Option<String>,
-        address_type: Option<String>,
-    ) -> Result<Address> {
-        let address = self
-            .with_wallet(wallet_name)?
-            .getnewaddress(label, address_type)
-            .await?;
-        Ok(address)
-    }
-
-    pub async fn get_wallet_info(&self, wallet_name: &str) -> Result<GetWalletInfoResponse> {
-        let response = self.with_wallet(wallet_name)?.getwalletinfo().await?;
-        Ok(response)
-    }
-
     pub async fn send_to_address(
         &self,
         wallet_name: &str,
@@ -115,19 +81,6 @@ impl Client {
             .await?;
         let txid = Txid::from_hex(&txid)?;
 
-        Ok(txid)
-    }
-
-    pub async fn send_raw_transaction(
-        &self,
-        wallet_name: &str,
-        transaction: Transaction,
-    ) -> Result<Txid> {
-        let txid = self
-            .with_wallet(wallet_name)?
-            .sendrawtransaction(transaction)
-            .await?;
-        let txid = Txid::from_hex(&txid)?;
         Ok(txid)
     }
 
@@ -168,36 +121,6 @@ impl Client {
         Ok(response.map_err(::jsonrpc_client::Error::JsonRpc)?)
     }
 
-    pub async fn get_transaction(
-        &self,
-        wallet_name: &str,
-        txid: Txid,
-    ) -> Result<GetTransactionResponse> {
-        let res = self.with_wallet(wallet_name)?.gettransaction(txid).await?;
-
-        Ok(res)
-    }
-
-    pub async fn dump_wallet(&self, wallet_name: &str, filename: &std::path::Path) -> Result<()> {
-        let _ = self.with_wallet(wallet_name)?.dumpwallet(filename).await?;
-        Ok(())
-    }
-
-    pub async fn list_unspent(
-        &self,
-        wallet_name: &str,
-        min_conf: Option<u32>,
-        max_conf: Option<u32>,
-        addresses: Option<Vec<Address>>,
-        include_unsafe: Option<bool>,
-    ) -> Result<Vec<Unspent>> {
-        let unspents = self
-            .with_wallet(wallet_name)?
-            .listunspent(min_conf, max_conf, addresses, include_unsafe)
-            .await?;
-        Ok(unspents)
-    }
-
     pub async fn fund_psbt(
         &self,
         wallet_name: &str,
@@ -229,11 +152,12 @@ impl Client {
             .await?;
         Ok(psbt)
     }
+
     pub async fn finalize_psbt(
         &self,
         wallet_name: &str,
         psbt: PsbtBase64,
-    ) -> Result<FinalizePsbtResponse> {
+    ) -> Result<FinalizePsbtResult> {
         let psbt = self.with_wallet(wallet_name)?.finalizepsbt(psbt).await?;
         Ok(psbt)
     }
@@ -242,7 +166,7 @@ impl Client {
         &self,
         wallet_name: &str,
         address: &Address,
-    ) -> Result<AddressInfoResponse> {
+    ) -> Result<GetAddressInfoResult> {
         let address_info = self
             .with_wallet(wallet_name)?
             .getaddressinfo(address)
@@ -253,7 +177,7 @@ impl Client {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("JSON Rpc Cliient: ")]
+    #[error("JSON Rpc Client: ")]
     JsonRpcClient(#[from] jsonrpc_client::Error<reqwest::Error>),
     #[error("Serde JSON: ")]
     SerdeJson(#[from] serde_json::Error),
@@ -274,14 +198,6 @@ pub enum Error {
 struct BlockchainInfo {
     chain: Network,
     mediantime: u32,
-}
-
-impl FinalizePsbtResponse {
-    pub fn transaction(&self) -> Result<Transaction> {
-        let data = hex::decode(&self.hex).unwrap();
-        let transaction = encode::deserialize(data.as_slice())?;
-        Ok(transaction)
-    }
 }
 
 /// Response to the RPC command `getrawtransaction`, when the second
@@ -336,44 +252,5 @@ mod test {
         };
 
         let _mediant_time = client.median_time().await.unwrap();
-    }
-
-    #[test]
-    fn decode_wallet_info() {
-        let json = r#"{
-        "walletname":"nectar_7426b018",
-        "walletversion":169900,
-        "balance":0.00000000,
-        "unconfirmed_balance":0.00000000,
-        "immature_balance":0.00000000,
-        "txcount":0,
-        "keypoololdest":1592792998,
-        "keypoolsize":1000,
-        "keypoolsize_hd_internal":1000,
-        "paytxfee":0.00000000,
-        "hdseedid":"4959e065fd8e278e4ffe62254897ddac18b02674",
-        "private_keys_enabled":true,
-        "avoid_reuse":false,
-        "scanning":false
-        }"#;
-
-        let info: WalletInfoResponse = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(
-            info,
-            WalletInfoResponse {
-                wallet_name: "nectar_7426b018".into(),
-                wallet_version: 169_900,
-                tx_count: 0,
-                keypool_oldest: 1_592_792_998,
-                keypool_size_hd_internal: 1000,
-                unlocked_until: None,
-                pay_tx_fee: 0.0,
-                hd_seed_id: Some("4959e065fd8e278e4ffe62254897ddac18b02674".into()),
-                private_keys_enabled: true,
-                avoid_reuse: false,
-                scanning: ScanProgress::Bool(false)
-            }
-        )
     }
 }

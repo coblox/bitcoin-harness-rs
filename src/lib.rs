@@ -59,12 +59,12 @@
 //!
 //! let utxos = wallet.list_unspent().await.unwrap();
 //!
-//! assert_eq!(utxos.get(0).unwrap().amount, 3.0);
+//! assert_eq!(utxos.get(0).unwrap().amount, amount);
 //! # }
 //! ```
 
 pub mod bitcoind_rpc;
-mod bitcoind_rpc_api;
+pub mod bitcoind_rpc_api;
 pub mod wallet;
 
 use crate::bitcoind_rpc_api::BitcoindRpcApi;
@@ -121,7 +121,8 @@ impl<'c> Bitcoind<'c> {
             .await?;
 
         let reward_address = bitcoind_client
-            .get_new_address(&self.wallet_name, None, None)
+            .with_wallet(&self.wallet_name)?
+            .getnewaddress(None, None)
             .await?;
 
         bitcoind_client
@@ -142,7 +143,8 @@ impl<'c> Bitcoind<'c> {
 
         // Confirm the transaction
         let reward_address = bitcoind_client
-            .get_new_address(&self.wallet_name, None, None)
+            .with_wallet(&self.wallet_name)?
+            .getnewaddress(None, None)
             .await?;
         bitcoind_client
             .generatetoaddress(1, reward_address, None)
