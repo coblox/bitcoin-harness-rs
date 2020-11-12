@@ -1,6 +1,7 @@
-use crate::bitcoind_rpc::{
-    AddressInfo, Client, FinalizedPsbt, ProcessedPsbt, PsbtBase64, Result, Unspent,
-    WalletInfoResponse, WalletTransactionInfo,
+use crate::bitcoind_rpc::{Client, Result};
+use crate::bitcoind_rpc_api::{
+    AddressInfoResponse, BitcoindRpcApi, FinalizePsbtResponse, GetTransactionResponse,
+    GetWalletInfoResponse, PsbtBase64, Unspent, WalletProcessPsbtResponse,
 };
 use bitcoin::{Address, Amount, Transaction, Txid};
 use url::Url;
@@ -30,16 +31,17 @@ impl Wallet {
 
     async fn init(&self) -> Result<()> {
         match self.info().await {
-            Err(_) => self
-                .client
-                .create_wallet(&self.name, None, None, None, None)
-                .await
-                .map(|_| ()),
+            Err(_) => {
+                self.client
+                    .createwallet(&self.name, None, None, None, None)
+                    .await?;
+                Ok(())
+            }
             Ok(_) => Ok(()),
         }
     }
 
-    pub async fn info(&self) -> Result<WalletInfoResponse> {
+    pub async fn info(&self) -> Result<GetWalletInfoResponse> {
         Ok(self.client.get_wallet_info(&self.name).await?)
     }
 
@@ -48,7 +50,7 @@ impl Wallet {
     }
 
     pub async fn block_height(&self) -> Result<u32> {
-        Ok(self.client.block_height().await?)
+        Ok(self.client.getblockcount().await?)
     }
 
     pub async fn new_address(&self) -> Result<Address> {
@@ -77,11 +79,11 @@ impl Wallet {
         self.client.get_raw_transaction(txid).await
     }
 
-    pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<WalletTransactionInfo> {
+    pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<GetTransactionResponse> {
         self.client.get_transaction(&self.name, txid).await
     }
 
-    pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
+    pub async fn address_info(&self, address: &Address) -> Result<AddressInfoResponse> {
         self.client.address_info(&self.name, address).await
     }
 
@@ -101,11 +103,11 @@ impl Wallet {
         self.client.join_psbts(&self.name, psbts).await
     }
 
-    pub async fn wallet_process_psbt(&self, psbt: PsbtBase64) -> Result<ProcessedPsbt> {
+    pub async fn wallet_process_psbt(&self, psbt: PsbtBase64) -> Result<WalletProcessPsbtResponse> {
         self.client.wallet_process_psbt(&self.name, psbt).await
     }
 
-    pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizedPsbt> {
+    pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizePsbtResponse> {
         self.client.finalize_psbt(&self.name, psbt).await
     }
 
@@ -117,7 +119,7 @@ impl Wallet {
             None => return Ok(None),
         };
 
-        let res = self.client.get_block(&block_hash).await?;
+        let res = self.client.getblock(&block_hash).await?;
 
         Ok(Some(res.height))
     }
