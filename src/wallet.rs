@@ -112,7 +112,7 @@ impl Wallet {
     pub async fn transaction_block_height(&self, txid: Txid) -> Result<Option<u32>> {
         let res = self.client.get_raw_transaction_verbose(txid).await?;
 
-        let block_hash = match res.block_hash {
+        let block_hash = match res.blockhash {
             Some(block_hash) => block_hash,
             None => return Ok(None),
         };
