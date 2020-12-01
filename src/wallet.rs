@@ -9,7 +9,7 @@ use url::Url;
 #[derive(Debug)]
 pub struct Wallet {
     name: String,
-    bitcoind_client: Client,
+    pub client: Client,
 }
 
 impl Wallet {
@@ -20,7 +20,7 @@ impl Wallet {
 
         let wallet = Self {
             name: name.to_string(),
-            bitcoind_client,
+            client: bitcoind_client,
         };
 
         wallet.init().await?;
@@ -31,7 +31,7 @@ impl Wallet {
     async fn init(&self) -> Result<()> {
         match self.info().await {
             Err(_) => self
-                .bitcoind_client
+                .client
                 .create_wallet(&self.name, None, None, None, None)
                 .await
                 .map(|_| ()),
@@ -40,91 +40,84 @@ impl Wallet {
     }
 
     pub async fn info(&self) -> Result<WalletInfoResponse> {
-        Ok(self.bitcoind_client.get_wallet_info(&self.name).await?)
+        Ok(self.client.get_wallet_info(&self.name).await?)
     }
 
     pub async fn median_time(&self) -> Result<u32> {
-        Ok(self.bitcoind_client.median_time().await?)
+        Ok(self.client.median_time().await?)
     }
 
     pub async fn block_height(&self) -> Result<u32> {
-        Ok(self.bitcoind_client.block_height().await?)
+        Ok(self.client.block_height().await?)
     }
 
     pub async fn new_address(&self) -> Result<Address> {
-        self.bitcoind_client
+        self.client
             .get_new_address(&self.name, None, Some("bech32".into()))
             .await
     }
 
     pub async fn balance(&self) -> Result<Amount> {
-        self.bitcoind_client
-            .get_balance(&self.name, None, None, None)
-            .await
+        self.client.get_balance(&self.name, None, None, None).await
     }
 
     pub async fn send_to_address(&self, address: Address, amount: Amount) -> Result<Txid> {
-        self.bitcoind_client
+        self.client
             .send_to_address(&self.name, address, amount)
             .await
     }
 
     pub async fn send_raw_transaction(&self, transaction: Transaction) -> Result<Txid> {
-        self.bitcoind_client
+        self.client
             .send_raw_transaction(&self.name, transaction)
             .await
     }
 
     pub async fn get_raw_transaction(&self, txid: Txid) -> Result<Transaction> {
-        self.bitcoind_client.get_raw_transaction(txid).await
+        self.client.get_raw_transaction(txid).await
     }
 
     pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<WalletTransactionInfo> {
-        self.bitcoind_client.get_transaction(&self.name, txid).await
+        self.client.get_transaction(&self.name, txid).await
     }
 
     pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
-        self.bitcoind_client.address_info(&self.name, address).await
+        self.client.address_info(&self.name, address).await
     }
 
     pub async fn list_unspent(&self) -> Result<Vec<Unspent>> {
-        self.bitcoind_client
+        self.client
             .list_unspent(&self.name, None, None, None, None)
             .await
     }
 
     pub async fn fund_psbt(&self, address: Address, amount: Amount) -> Result<String> {
-        self.bitcoind_client
+        self.client
             .fund_psbt(&self.name, &[], address, amount)
             .await
     }
 
     pub async fn join_psbts(&self, psbts: &[String]) -> Result<PsbtBase64> {
-        self.bitcoind_client.join_psbts(&self.name, psbts).await
+        self.client.join_psbts(&self.name, psbts).await
     }
 
     pub async fn wallet_process_psbt(&self, psbt: PsbtBase64) -> Result<ProcessedPsbt> {
-        self.bitcoind_client
-            .wallet_process_psbt(&self.name, psbt)
-            .await
+        self.client.wallet_process_psbt(&self.name, psbt).await
     }
 
     pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizedPsbt> {
-        self.bitcoind_client.finalize_psbt(&self.name, psbt).await
+        self.client.finalize_psbt(&self.name, psbt).await
     }
 
     pub async fn transaction_block_height(&self, txid: Txid) -> Result<Option<u32>> {
-        let res = self
-            .bitcoind_client
-            .get_raw_transaction_verbose(txid)
-            .await?;
+        let res = self.client.get_raw_transaction_verbose(txid).await?;
 
         let block_hash = match res.block_hash {
             Some(block_hash) => block_hash,
             None => return Ok(None),
         };
 
-        let res = self.bitcoind_client.get_block(&block_hash).await?;
+        let res = self.client.get_block(&block_hash).await?;
 
         Ok(Some(res.height))
     }
