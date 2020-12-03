@@ -229,7 +229,7 @@ impl Client {
     pub async fn get_raw_transaction_verbose(
         &self,
         txid: Txid,
-    ) -> Result<GetRawTransactionVerboseResponse> {
+    ) -> Result<bitcoincore_rpc_json::GetRawTransactionResult> {
         let res = self.get_raw_transaction_rpc(txid, true).await?;
 
         Ok(res)
@@ -651,18 +651,6 @@ pub struct AddressInfo {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 pub struct WalletTransactionInfo {
     pub fee: f64,
-}
-
-/// Response to the RPC command `getrawtransaction`, when the second
-/// argument is set to `true`.
-///
-/// It only defines one field, but can be expanded to include all the
-/// fields returned by `bitcoind` (see:
-/// https://bitcoincore.org/en/doc/0.19.0/rpc/rawtransactions/getrawtransaction/)
-#[derive(Clone, Copy, Debug, Deserialize)]
-pub struct GetRawTransactionVerboseResponse {
-    #[serde(rename = "blockhash")]
-    pub block_hash: Option<bitcoin::BlockHash>,
 }
 
 /// Response to the RPC command `getblock`.
