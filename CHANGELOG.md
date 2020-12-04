@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2020-12-04
+
 ### Changed
 
 -   **Breaking Change**: Use `bitcoincore_rpc_json::GetRawTransactionVerboseResponse` as return type for `get_raw_transaction_verbose` to get all fields.
@@ -19,6 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 -   A library to spin up a bitcoind node and do the things we always do: activate segwit, fund addresses, mine blocks.
 
-[Unreleased]: https://github.com/comit-network/comit-rs/compare/0.1.0...HEAD
-
-[0.1.0]: https://github.com/comit-network/comit-rs/compare/5549a14a3c5021998a5b4b681bf92b5f2fddf525...0.1.0
+[Unreleased]: https://github.com/coblox/bitcoin-harness-rs/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/coblox/bitcoin-harness-rs/compare/0.1.0...0.2.0
+[0.1.0]: https://github.com/coblox/bitcoin-harness-rs/compare/5549a14a3c5021998a5b4b681bf92b5f2fddf525...0.1.0
