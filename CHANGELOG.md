@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 -   **Breaking Change**: Use `bitcoincore_rpc_json::GetRawTransactionVerboseResponse` as return type for `get_raw_transaction_verbose` to get all fields.
 -   Expose bitcoind rpc client from wallet.
+-   **Breaking Change**: Upgrade rust-bitcoin to 0.25.
 
 ## [0.1.0] - 2020-11-11
 
