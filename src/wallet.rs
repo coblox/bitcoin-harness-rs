@@ -145,7 +145,7 @@ impl Wallet {
         self.client.finalize_psbt(&self.name, psbt).await
     }
 
-    pub async fn transaction_block_height(&self, txid: Txid) -> Result<Option<u64>> {
+    pub async fn transaction_block_height(&self, txid: Txid) -> Result<Option<u32>> {
         let res = self.client.get_raw_transaction_verbose(txid).await?;
 
         let block_hash = match res.blockhash {
@@ -155,7 +155,9 @@ impl Wallet {
 
         let res = self.client.getblock(&block_hash).await?;
 
-        Ok(Some(res.height as u64))
+        // Won't be an issue for the next 800 centuries
+        #[allow(clippy::cast_possible_truncation)]
+        Ok(Some(res.height as u32))
     }
 }
 
