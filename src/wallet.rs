@@ -19,11 +19,11 @@ impl Wallet {
     /// Create a wallet on the bitcoind instance or use the wallet with the same name
     /// if it exists.
     pub async fn new(name: &str, url: Url) -> Result<Self> {
-        let bitcoind_client = Client::new(url);
+        let client = Client::new(url);
 
         let wallet = Self {
             name: name.to_string(),
-            client: bitcoind_client,
+            client,
         };
 
         wallet.init().await?;
