@@ -67,12 +67,12 @@ pub mod bitcoind_rpc;
 pub mod bitcoind_rpc_api;
 pub mod wallet;
 
-use crate::bitcoind_rpc_api::BitcoindRpcApi;
 use reqwest::Url;
 use std::time::Duration;
 use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container, Docker};
 
 pub use crate::bitcoind_rpc::Client;
+pub use crate::bitcoind_rpc_api::BitcoindRpcApi;
 pub use crate::wallet::Wallet;
 
 pub type Result<T> = std::result::Result<T, Error>;

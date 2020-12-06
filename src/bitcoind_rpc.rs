@@ -1,6 +1,5 @@
 //! An incomplete async bitcoind rpc client that supports multi-wallet features
 
-use crate::bitcoind_rpc_api::{BitcoindRpcApi, PsbtBase64, WalletProcessPsbtResponse};
 use ::bitcoin::{hashes::hex::FromHex, Address, Amount, Network, Transaction, Txid};
 use bitcoincore_rpc_json::{FinalizePsbtResult, GetAddressInfoResult};
 use jsonrpc_client::{JsonRpcError, ResponsePayload, SendRequest};
@@ -8,6 +7,8 @@ use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::collections::HashMap;
+
+pub use crate::bitcoind_rpc_api::*;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -226,7 +227,9 @@ pub struct GetBlockResponse {
 mod test {
     use super::*;
     use crate::Bitcoind;
+    use std::time::Duration;
     use testcontainers::clients;
+    use tokio::time::delay_for;
 
     #[tokio::test]
     async fn get_network_info() {
@@ -252,5 +255,21 @@ mod test {
         };
 
         let _mediant_time = client.median_time().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn blockcount() {
+        let tc_client = testcontainers::clients::Cli::default();
+        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        bitcoind.init(5).await.unwrap();
+
+        let client = Client::new(bitcoind.node_url.clone());
+
+        let height_0 = client.getblockcount().await.unwrap();
+        delay_for(Duration::from_secs(2)).await;
+
+        let height_1 = client.getblockcount().await.unwrap();
+
+        assert!(height_1 > height_0)
     }
 }

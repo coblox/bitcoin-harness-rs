@@ -51,6 +51,12 @@ impl Wallet {
         Ok(self.client.median_time().await?)
     }
 
+    #[deprecated(
+        since = "0.3.0",
+        note = "please directly use `client.getblockcount` instead"
+    )]
+    #[allow(clippy::cast_possible_truncation)]
+    // It is going to be fine for a while and this method is deprecated
     pub async fn block_height(&self) -> Result<u32> {
         Ok(self.client.getblockcount().await?)
     }
@@ -271,24 +277,6 @@ mod test {
         let transaction = alice_finalized_psbt.transaction().unwrap().unwrap();
         let txid = alice.send_raw_transaction(transaction).await.unwrap();
         println!("Final tx_id: {:?}", txid);
-    }
-
-    #[tokio::test]
-    async fn block_height() {
-        let tc_client = testcontainers::clients::Cli::default();
-        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
-        bitcoind.init(5).await.unwrap();
-
-        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
-            .await
-            .unwrap();
-
-        let height_0 = wallet.block_height().await.unwrap();
-        delay_for(Duration::from_secs(2)).await;
-
-        let height_1 = wallet.block_height().await.unwrap();
-
-        assert!(height_1 > height_0)
     }
 
     #[tokio::test]
