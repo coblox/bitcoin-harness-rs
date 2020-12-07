@@ -59,12 +59,12 @@
 //!
 //! let utxos = wallet.list_unspent().await.unwrap();
 //!
-//! assert_eq!(utxos.get(0).unwrap().amount, 3.0);
+//! assert_eq!(utxos.get(0).unwrap().amount, amount);
 //! # }
 //! ```
 
 pub mod bitcoind_rpc;
-pub mod json_rpc;
+pub mod bitcoind_rpc_api;
 pub mod wallet;
 
 use reqwest::Url;
@@ -72,6 +72,7 @@ use std::time::Duration;
 use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container, Docker};
 
 pub use crate::bitcoind_rpc::Client;
+pub use crate::bitcoind_rpc_api::BitcoindRpcApi;
 pub use crate::wallet::Wallet;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -116,15 +117,16 @@ impl<'c> Bitcoind<'c> {
         let bitcoind_client = Client::new(self.node_url.clone());
 
         bitcoind_client
-            .create_wallet(&self.wallet_name, None, None, None, None)
+            .createwallet(&self.wallet_name, None, None, None, None)
             .await?;
 
         let reward_address = bitcoind_client
-            .get_new_address(&self.wallet_name, None, None)
+            .with_wallet(&self.wallet_name)?
+            .getnewaddress(None, None)
             .await?;
 
         bitcoind_client
-            .generate_to_address(101 + spendable_quantity, reward_address.clone(), None)
+            .generatetoaddress(101 + spendable_quantity, reward_address.clone(), None)
             .await?;
         let _ = tokio::spawn(mine(bitcoind_client, reward_address));
 
@@ -141,10 +143,11 @@ impl<'c> Bitcoind<'c> {
 
         // Confirm the transaction
         let reward_address = bitcoind_client
-            .get_new_address(&self.wallet_name, None, None)
+            .with_wallet(&self.wallet_name)?
+            .getnewaddress(None, None)
             .await?;
         bitcoind_client
-            .generate_to_address(1, reward_address, None)
+            .generatetoaddress(1, reward_address, None)
             .await?;
 
         Ok(())
@@ -159,7 +162,7 @@ async fn mine(bitcoind_client: Client, reward_address: bitcoin::Address) -> Resu
     loop {
         tokio::time::delay_for(Duration::from_secs(1)).await;
         bitcoind_client
-            .generate_to_address(1, reward_address.clone(), None)
+            .generatetoaddress(1, reward_address.clone(), None)
             .await?;
     }
 }
@@ -168,6 +171,8 @@ async fn mine(bitcoind_client: Client, reward_address: bitcoin::Address) -> Resu
 pub enum Error {
     #[error("Bitcoin Rpc: ")]
     BitcoindRpc(#[from] bitcoind_rpc::Error),
+    #[error("Json Rpc: ")]
+    JsonRpc(#[from] jsonrpc_client::Error<reqwest::Error>),
     #[error("Url Parsing: ")]
     UrlParseError(#[from] url::ParseError),
     #[error("Docker port not exposed: ")]

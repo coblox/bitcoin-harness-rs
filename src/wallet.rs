@@ -1,8 +1,11 @@
-use crate::bitcoind_rpc::{
-    AddressInfo, Client, FinalizedPsbt, ProcessedPsbt, PsbtBase64, Result, Unspent,
-    WalletInfoResponse, WalletTransactionInfo,
-};
+use crate::bitcoind_rpc::{Client, Result};
+use crate::bitcoind_rpc_api::{Account, BitcoindRpcApi, PsbtBase64, WalletProcessPsbtResponse};
+use bitcoin::hashes::hex::FromHex;
 use bitcoin::{Address, Amount, Transaction, Txid};
+use bitcoincore_rpc_json::{
+    FinalizePsbtResult, GetAddressInfoResult, GetTransactionResult, GetWalletInfoResult,
+    ListUnspentResultEntry,
+};
 use url::Url;
 
 /// A wrapper to bitcoind wallet
@@ -16,11 +19,11 @@ impl Wallet {
     /// Create a wallet on the bitcoind instance or use the wallet with the same name
     /// if it exists.
     pub async fn new(name: &str, url: Url) -> Result<Self> {
-        let bitcoind_client = Client::new(url);
+        let client = Client::new(url);
 
         let wallet = Self {
             name: name.to_string(),
-            client: bitcoind_client,
+            client,
         };
 
         wallet.init().await?;
@@ -30,65 +33,98 @@ impl Wallet {
 
     async fn init(&self) -> Result<()> {
         match self.info().await {
-            Err(_) => self
-                .client
-                .create_wallet(&self.name, None, None, None, None)
-                .await
-                .map(|_| ()),
+            Err(_) => {
+                self.client
+                    .createwallet(&self.name, None, None, None, None)
+                    .await?;
+                Ok(())
+            }
             Ok(_) => Ok(()),
         }
     }
 
-    pub async fn info(&self) -> Result<WalletInfoResponse> {
-        Ok(self.client.get_wallet_info(&self.name).await?)
+    pub async fn info(&self) -> Result<GetWalletInfoResult> {
+        Ok(self.client.with_wallet(&self.name)?.getwalletinfo().await?)
     }
 
-    pub async fn median_time(&self) -> Result<u32> {
+    pub async fn median_time(&self) -> Result<u64> {
         Ok(self.client.median_time().await?)
     }
 
+    #[deprecated(
+        since = "0.3.0",
+        note = "please directly use `client.getblockcount` instead"
+    )]
+    #[allow(clippy::cast_possible_truncation)]
+    // It is going to be fine for a while and this method is deprecated
     pub async fn block_height(&self) -> Result<u32> {
-        Ok(self.client.block_height().await?)
+        Ok(self.client.getblockcount().await?)
     }
 
     pub async fn new_address(&self) -> Result<Address> {
-        self.client
-            .get_new_address(&self.name, None, Some("bech32".into()))
-            .await
+        Ok(self
+            .client
+            .with_wallet(&self.name)?
+            .getnewaddress(None, Some("bech32".into()))
+            .await?)
     }
 
     pub async fn balance(&self) -> Result<Amount> {
-        self.client.get_balance(&self.name, None, None, None).await
+        let response = self
+            .client
+            .with_wallet(&self.name)?
+            .getbalance(Account, None, None, None)
+            .await?;
+        let amount = Amount::from_btc(response)?;
+        Ok(amount)
     }
 
     pub async fn send_to_address(&self, address: Address, amount: Amount) -> Result<Txid> {
-        self.client
-            .send_to_address(&self.name, address, amount)
-            .await
+        let txid = self
+            .client
+            .with_wallet(&self.name)?
+            .sendtoaddress(address, amount.as_btc())
+            .await?;
+        let txid = Txid::from_hex(&txid)?;
+
+        Ok(txid)
     }
 
     pub async fn send_raw_transaction(&self, transaction: Transaction) -> Result<Txid> {
-        self.client
-            .send_raw_transaction(&self.name, transaction)
-            .await
+        let txid = self
+            .client
+            .with_wallet(&self.name)?
+            .sendrawtransaction(transaction.into())
+            .await?;
+        let txid = Txid::from_hex(&txid)?;
+        Ok(txid)
     }
 
     pub async fn get_raw_transaction(&self, txid: Txid) -> Result<Transaction> {
         self.client.get_raw_transaction(txid).await
     }
 
-    pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<WalletTransactionInfo> {
-        self.client.get_transaction(&self.name, txid).await
+    pub async fn get_wallet_transaction(&self, txid: Txid) -> Result<GetTransactionResult> {
+        let res = self
+            .client
+            .with_wallet(&self.name)?
+            .gettransaction(txid)
+            .await?;
+
+        Ok(res)
     }
 
-    pub async fn address_info(&self, address: &Address) -> Result<AddressInfo> {
+    pub async fn address_info(&self, address: &Address) -> Result<GetAddressInfoResult> {
         self.client.address_info(&self.name, address).await
     }
 
-    pub async fn list_unspent(&self) -> Result<Vec<Unspent>> {
-        self.client
-            .list_unspent(&self.name, None, None, None, None)
-            .await
+    pub async fn list_unspent(&self) -> Result<Vec<ListUnspentResultEntry>> {
+        let unspents = self
+            .client
+            .with_wallet(&self.name)?
+            .listunspent(None, None, None, None)
+            .await?;
+        Ok(unspents)
     }
 
     pub async fn fund_psbt(&self, address: Address, amount: Amount) -> Result<String> {
@@ -101,11 +137,11 @@ impl Wallet {
         self.client.join_psbts(&self.name, psbts).await
     }
 
-    pub async fn wallet_process_psbt(&self, psbt: PsbtBase64) -> Result<ProcessedPsbt> {
+    pub async fn wallet_process_psbt(&self, psbt: PsbtBase64) -> Result<WalletProcessPsbtResponse> {
         self.client.wallet_process_psbt(&self.name, psbt).await
     }
 
-    pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizedPsbt> {
+    pub async fn finalize_psbt(&self, psbt: PsbtBase64) -> Result<FinalizePsbtResult> {
         self.client.finalize_psbt(&self.name, psbt).await
     }
 
@@ -117,9 +153,11 @@ impl Wallet {
             None => return Ok(None),
         };
 
-        let res = self.client.get_block(&block_hash).await?;
+        let res = self.client.getblock(&block_hash).await?;
 
-        Ok(Some(res.height))
+        // Won't be an issue for the next 800 centuries
+        #[allow(clippy::cast_possible_truncation)]
+        Ok(Some(res.height as u32))
     }
 }
 
@@ -238,29 +276,9 @@ mod test {
 
         let alice_finalized_psbt = alice.finalize_psbt(bob_signed_psbt.into()).await.unwrap();
 
-        let txid = alice
-            .send_raw_transaction(alice_finalized_psbt.transaction().unwrap())
-            .await
-            .unwrap();
+        let transaction = alice_finalized_psbt.transaction().unwrap().unwrap();
+        let txid = alice.send_raw_transaction(transaction).await.unwrap();
         println!("Final tx_id: {:?}", txid);
-    }
-
-    #[tokio::test]
-    async fn block_height() {
-        let tc_client = testcontainers::clients::Cli::default();
-        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
-        bitcoind.init(5).await.unwrap();
-
-        let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
-            .await
-            .unwrap();
-
-        let height_0 = wallet.block_height().await.unwrap();
-        delay_for(Duration::from_secs(2)).await;
-
-        let height_1 = wallet.block_height().await.unwrap();
-
-        assert!(height_1 > height_0)
     }
 
     #[tokio::test]

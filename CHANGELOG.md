@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+-   Replace JSON RPC Client with thomaseizinger/rust-jsonrpc-client
+
 ## [0.2.0] - 2020-12-04
 
 ### Changed
