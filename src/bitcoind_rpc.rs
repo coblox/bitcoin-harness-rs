@@ -9,6 +9,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 pub use crate::bitcoind_rpc_api::*;
+pub use jsonrpc_client;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
