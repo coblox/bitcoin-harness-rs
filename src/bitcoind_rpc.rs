@@ -230,7 +230,7 @@ mod test {
     use crate::Bitcoind;
     use std::time::Duration;
     use testcontainers::clients;
-    use tokio::time::delay_for;
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn get_network_info() {
@@ -267,7 +267,7 @@ mod test {
         let client = Client::new(bitcoind.node_url.clone());
 
         let height_0 = client.getblockcount().await.unwrap();
-        delay_for(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(2)).await;
 
         let height_1 = client.getblockcount().await.unwrap();
 

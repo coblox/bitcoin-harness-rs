@@ -168,7 +168,7 @@ mod test {
     use crate::{Bitcoind, Wallet};
     use bitcoin::util::psbt::PartiallySignedTransaction;
     use bitcoin::{Amount, Transaction, TxOut};
-    use tokio::time::delay_for;
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn get_wallet_transaction() {
@@ -304,7 +304,7 @@ mod test {
         // wait for the transaction to be included in a block, so that
         // it has a block height field assigned to it when calling
         // `getrawtransaction`
-        delay_for(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(2)).await;
 
         let _res = wallet.transaction_block_height(txid).await.unwrap();
     }
