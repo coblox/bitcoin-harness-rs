@@ -14,7 +14,7 @@ bitcoin = { version = "0.25", features = ["use-serde"] }
 bitcoincore-rpc-json = "0.12"
 futures = "0.3.5"
 hex = "0.4.2"
-jsonrpc_client = { git = "https://github.com/thomaseizinger/rust-jsonrpc-client", rev = "f60c839481c1ac68909ada0141a3a3bf085bb1af", features = ["reqwest"] }
+jsonrpc_client = { version = "0.5", features = ["reqwest"] }
 reqwest = { version = "0.11", default-features = false, features = ["json", "native-tls"] }
 serde = "1.0"
 serde_json = "1.0"
