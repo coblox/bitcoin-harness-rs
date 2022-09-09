@@ -48,7 +48,7 @@ impl Wallet {
     }
 
     pub async fn median_time(&self) -> Result<u64> {
-        Ok(self.client.median_time().await?)
+        self.client.median_time().await
     }
 
     #[deprecated(

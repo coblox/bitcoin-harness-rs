@@ -196,12 +196,6 @@ pub enum Error {
     ParseUrl(#[from] url::ParseError),
 }
 
-#[derive(Debug, Deserialize)]
-struct BlockchainInfo {
-    chain: Network,
-    mediantime: u32,
-}
-
 /// Response to the RPC command `getrawtransaction`, when the second
 /// argument is set to `true`.
 ///

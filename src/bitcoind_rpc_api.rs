@@ -78,7 +78,7 @@ pub trait BitcoindRpcApi {
     async fn walletprocesspsbt(&self, psbt: PsbtBase64) -> WalletProcessPsbtResponse;
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DumpWalletResponse {
     pub filename: String,
 }
