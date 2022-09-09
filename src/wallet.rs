@@ -1,5 +1,5 @@
 use crate::bitcoind_rpc::{Client, Result};
-use crate::bitcoind_rpc_api::{Account, BitcoindRpcApi, PsbtBase64, WalletProcessPsbtResponse};
+use crate::bitcoind_rpc_api::{BitcoindRpcApi, PsbtBase64, WalletProcessPsbtResponse};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::{Address, Amount, Transaction, Txid};
 use bitcoincore_rpc_json::{
@@ -73,7 +73,7 @@ impl Wallet {
         let response = self
             .client
             .with_wallet(&self.name)?
-            .getbalance(Account, None, None, None)
+            .getbalance(None, None, None)
             .await?;
         let amount = Amount::from_btc(response)?;
         Ok(amount)
@@ -173,7 +173,7 @@ mod test {
     #[tokio::test]
     async fn get_wallet_transaction() {
         let tc_client = testcontainers::clients::Cli::default();
-        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        let bitcoind = Bitcoind::new(&tc_client).unwrap();
         bitcoind.init(5).await.unwrap();
 
         let wallet = Wallet::new("wallet", bitcoind.node_url.clone())
@@ -196,7 +196,7 @@ mod test {
     #[tokio::test]
     async fn two_party_psbt_test() {
         let tc_client = testcontainers::clients::Cli::default();
-        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        let bitcoind = Bitcoind::new(&tc_client).unwrap();
         bitcoind.init(5).await.unwrap();
 
         let alice = Wallet::new("alice", bitcoind.node_url.clone())
@@ -284,7 +284,7 @@ mod test {
     #[tokio::test]
     async fn transaction_block_height() {
         let tc_client = testcontainers::clients::Cli::default();
-        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        let bitcoind = Bitcoind::new(&tc_client).unwrap();
         bitcoind.init(5).await.unwrap();
 
         let wallet = Wallet::new("wallet", bitcoind.node_url.clone())

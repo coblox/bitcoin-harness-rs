@@ -7,18 +7,16 @@ description = "A simple lib to start a bitcoind container, generate blocks and f
 license = "MIT"
 
 [dependencies]
-# Hopefully goes away: https://github.com/thomaseizinger/rust-jsonrpc-client/issues/6
-async-trait = "0.1"
 base64 = "0.12.3"
-bitcoin = { version = "0.27", features = ["use-serde"] }
-bitcoincore-rpc-json = "0.14"
+bitcoin = { version = "0.28", features = ["use-serde"] }
+bitcoincore-rpc-json = "0.15"
 futures = "0.3.5"
 hex = "0.4.2"
-jsonrpc_client = { version = "0.5", features = ["reqwest"] }
+jsonrpc_client = { version = "0.7", features = ["reqwest"] }
 reqwest = { version = "0.11", default-features = false, features = ["json"] }
 serde = "1.0"
 serde_json = "1.0"
-testcontainers = "0.11"
+testcontainers = "0.14"
 thiserror = "1.0"
 tokio = { version = "1.0", features = ["time"] }
 tracing = "0.1"
