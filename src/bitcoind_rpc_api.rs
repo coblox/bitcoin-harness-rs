@@ -24,25 +24,18 @@ pub trait BitcoindRpcApi {
 
     async fn finalizepsbt(&self, psbt: PsbtBase64) -> FinalizePsbtResult;
 
-    async fn generatetoaddress(
-        &self,
-        nblocks: u32,
-        address: Address,
-        max_tries: Option<u32>,
-    ) -> Vec<BlockHash>;
+    async fn generatetoaddress(&self, nblocks: u32, address: Address) -> Vec<BlockHash>;
 
     async fn getaddressinfo(&self, address: &Address) -> GetAddressInfoResult;
 
-    // TODO: Manual implementation to avoid odd "account" parameter
     async fn getbalance(
         &self,
-        account: Account,
-        minimum_confirmation: Option<u32>,
-        include_watch_only: Option<bool>,
+        minconf: Option<u32>,
+        include_watchonly: Option<bool>,
         avoid_reuse: Option<bool>,
     ) -> f64;
 
-    async fn getblock(&self, block_hash: &bitcoin::BlockHash) -> GetBlockResult;
+    async fn getblock(&self, blockhash: &bitcoin::BlockHash) -> GetBlockResult;
 
     async fn getblockchaininfo(&self) -> GetBlockchainInfoResult;
 
@@ -56,19 +49,19 @@ pub trait BitcoindRpcApi {
 
     async fn getwalletinfo(&self) -> GetWalletInfoResult;
 
-    async fn joinpsbts(&self, psbts: &[String]) -> PsbtBase64;
+    async fn joinpsbts(&self, txs: &[String]) -> PsbtBase64;
 
     async fn listunspent(
         &self,
-        min_conf: Option<u32>,
-        max_conf: Option<u32>,
+        minconf: Option<u32>,
+        maxconf: Option<u32>,
         addresses: Option<Vec<Address>>,
         include_unsafe: Option<bool>,
     ) -> Vec<ListUnspentResultEntry>;
 
     async fn listwallets(&self) -> Vec<String>;
 
-    async fn sendrawtransaction(&self, transaction: TransactionHex) -> String;
+    async fn sendrawtransaction(&self, hexstring: TransactionHex) -> String;
 
     /// amount is btc
     async fn sendtoaddress(&self, address: Address, amount: f64) -> String;
@@ -85,7 +78,7 @@ pub trait BitcoindRpcApi {
     async fn walletprocesspsbt(&self, psbt: PsbtBase64) -> WalletProcessPsbtResponse;
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DumpWalletResponse {
     pub filename: String,
 }

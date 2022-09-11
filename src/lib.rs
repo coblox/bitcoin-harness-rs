@@ -26,7 +26,7 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! let tc_client = testcontainers::clients::Cli::default();
-//! let bitcoind = Bitcoind::new(&tc_client, "0.20.0").unwrap();
+//! let bitcoind = Bitcoind::new(&tc_client).unwrap();
 //! let client = Client::new(bitcoind.node_url);
 //! let network = client.network().await.unwrap();
 //!
@@ -42,7 +42,7 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! let tc_client = testcontainers::clients::Cli::default();
-//! let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+//! let bitcoind = Bitcoind::new(&tc_client).unwrap();
 //! let client = Client::new(bitcoind.node_url.clone());
 //!
 //! bitcoind.init(5).await.unwrap();
@@ -69,7 +69,7 @@ pub mod wallet;
 
 use reqwest::Url;
 use std::time::Duration;
-use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container, Docker};
+use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container};
 
 pub use crate::bitcoind_rpc::Client;
 pub use crate::bitcoind_rpc_api::BitcoindRpcApi;
@@ -81,23 +81,23 @@ const BITCOIND_RPC_PORT: u16 = 18443;
 
 #[derive(Debug)]
 pub struct Bitcoind<'c> {
-    pub container: Container<'c, clients::Cli, BitcoinCore>,
+    pub container: Container<'c, BitcoinCore>,
     pub node_url: Url,
     pub wallet_name: String,
 }
 
 impl<'c> Bitcoind<'c> {
     /// Starts a new regtest bitcoind container
-    pub fn new(client: &'c clients::Cli, tag: &str) -> Result<Self> {
-        let container = client.run(BitcoinCore::default().with_tag(tag));
-        let port = container
-            .get_host_port(BITCOIND_RPC_PORT)
-            .ok_or(Error::PortNotExposed(BITCOIND_RPC_PORT))?;
+    pub fn new(client: &'c clients::Cli) -> Result<Self> {
+        let container = client.run(BitcoinCore::default());
+        let port = container.get_host_port_ipv4(BITCOIND_RPC_PORT);
 
-        let auth = container.image().auth();
+        let auth = &container.image_args().rpc_auth;
         let url = format!(
             "http://{}:{}@localhost:{}",
-            &auth.username, &auth.password, port
+            auth.username(),
+            auth.password(),
+            port
         );
         let url = Url::parse(&url)?;
 
@@ -126,7 +126,7 @@ impl<'c> Bitcoind<'c> {
             .await?;
 
         bitcoind_client
-            .generatetoaddress(101 + spendable_quantity, reward_address.clone(), None)
+            .generatetoaddress(101 + spendable_quantity, reward_address.clone())
             .await?;
         let _ = tokio::spawn(mine(bitcoind_client, reward_address));
 
@@ -146,9 +146,7 @@ impl<'c> Bitcoind<'c> {
             .with_wallet(&self.wallet_name)?
             .getnewaddress(None, None)
             .await?;
-        bitcoind_client
-            .generatetoaddress(1, reward_address, None)
-            .await?;
+        bitcoind_client.generatetoaddress(1, reward_address).await?;
 
         Ok(())
     }
@@ -162,7 +160,7 @@ async fn mine(bitcoind_client: Client, reward_address: bitcoin::Address) -> Resu
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
         bitcoind_client
-            .generatetoaddress(1, reward_address.clone(), None)
+            .generatetoaddress(1, reward_address.clone())
             .await?;
     }
 }

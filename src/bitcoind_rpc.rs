@@ -103,13 +103,13 @@ impl Client {
         Ok(res)
     }
 
-    async fn get_raw_transaction_rpc<R>(&self, txid: Txid, is_verbose: bool) -> Result<R>
+    async fn get_raw_transaction_rpc<R>(&self, txid: Txid, verbose: bool) -> Result<R>
     where
         R: std::fmt::Debug + DeserializeOwned,
     {
         let body = jsonrpc_client::Request::new_v2("getrawtransaction")
-            .with_argument(txid)?
-            .with_argument(is_verbose)?
+            .with_argument("txid".into(), txid)?
+            .with_argument("verbose".into(), verbose)?
             .serialize()?;
 
         let payload: ResponsePayload<R> = self
@@ -196,12 +196,6 @@ pub enum Error {
     ParseUrl(#[from] url::ParseError),
 }
 
-#[derive(Debug, Deserialize)]
-struct BlockchainInfo {
-    chain: Network,
-    mediantime: u32,
-}
-
 /// Response to the RPC command `getrawtransaction`, when the second
 /// argument is set to `true`.
 ///
@@ -236,7 +230,7 @@ mod test {
     async fn get_network_info() {
         let tc_client = clients::Cli::default();
         let (client, _container) = {
-            let blockchain = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+            let blockchain = Bitcoind::new(&tc_client).unwrap();
 
             (Client::new(blockchain.node_url.clone()), blockchain)
         };
@@ -250,7 +244,7 @@ mod test {
     async fn get_median_time() {
         let tc_client = clients::Cli::default();
         let (client, _container) = {
-            let blockchain = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+            let blockchain = Bitcoind::new(&tc_client).unwrap();
 
             (Client::new(blockchain.node_url.clone()), blockchain)
         };
@@ -261,7 +255,7 @@ mod test {
     #[tokio::test]
     async fn blockcount() {
         let tc_client = testcontainers::clients::Cli::default();
-        let bitcoind = Bitcoind::new(&tc_client, "0.19.1").unwrap();
+        let bitcoind = Bitcoind::new(&tc_client).unwrap();
         bitcoind.init(5).await.unwrap();
 
         let client = Client::new(bitcoind.node_url.clone());
