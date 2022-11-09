@@ -8,8 +8,8 @@ license = "MIT"
 
 [dependencies]
 base64 = "0.12.3"
-bitcoin = { version = "0.28", features = ["use-serde"] }
-bitcoincore-rpc-json = "0.15"
+bitcoin = { version = "0.29", features = ["serde"] }
+bitcoincore-rpc-json = "0.16"
 futures = "0.3.5"
 hex = "0.4.2"
 jsonrpc_client = { version = "0.7", features = ["reqwest"] }

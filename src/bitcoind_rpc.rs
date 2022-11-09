@@ -79,7 +79,7 @@ impl Client {
     ) -> Result<Txid> {
         let txid = self
             .with_wallet(wallet_name)?
-            .sendtoaddress(address, amount.as_btc())
+            .sendtoaddress(address, amount.to_btc())
             .await?;
         let txid = Txid::from_hex(&txid)?;
 
@@ -131,7 +131,7 @@ impl Client {
         amount: Amount,
     ) -> Result<String> {
         let mut outputs_converted = HashMap::new();
-        outputs_converted.insert(address.to_string(), amount.as_btc());
+        outputs_converted.insert(address.to_string(), amount.to_btc());
         let psbt = self
             .with_wallet(wallet_name)?
             .walletcreatefundedpsbt(inputs, outputs_converted)

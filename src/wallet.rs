@@ -83,7 +83,7 @@ impl Wallet {
         let txid = self
             .client
             .with_wallet(&self.name)?
-            .sendtoaddress(address, amount.as_btc())
+            .sendtoaddress(address, amount.to_btc())
             .await?;
         let txid = Txid::from_hex(&txid)?;
 
@@ -241,7 +241,7 @@ mod test {
         });
         // add shared output with twice the btc to fit change addresses
         outputs.push(TxOut {
-            value: Amount::from_btc(2.0).unwrap().as_sat(),
+            value: Amount::from_btc(2.0).unwrap().to_sat(),
             script_pubkey: joined_address.clone().script_pubkey(),
         });
 
