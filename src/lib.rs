@@ -65,14 +65,16 @@
 
 pub mod bitcoind_rpc;
 pub mod bitcoind_rpc_api;
+pub mod img;
 pub mod wallet;
 
 use reqwest::Url;
 use std::time::Duration;
-use testcontainers::{clients, images::coblox_bitcoincore::BitcoinCore, Container};
+use testcontainers::{clients, Container};
 
 pub use crate::bitcoind_rpc::Client;
 pub use crate::bitcoind_rpc_api::BitcoindRpcApi;
+pub use crate::img::BitcoinCore;
 pub use crate::wallet::Wallet;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -89,7 +91,7 @@ pub struct Bitcoind<'c> {
 impl<'c> Bitcoind<'c> {
     /// Starts a new regtest bitcoind container
     pub fn new(client: &'c clients::Cli) -> Result<Self> {
-        let container = client.run(BitcoinCore::default());
+        let container = client.run(BitcoinCore);
         let port = container.get_host_port_ipv4(BITCOIND_RPC_PORT);
 
         let auth = &container.image_args().rpc_auth;
